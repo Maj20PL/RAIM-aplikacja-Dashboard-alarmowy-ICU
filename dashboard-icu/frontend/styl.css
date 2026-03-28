@@ -1,0 +1,19 @@
+body {
+    font-family: Arial;
+    background: #111;
+    color: white;
+}
+
+h1 {
+    color: cyan;
+}
+
+canvas {
+    max-width: stretch;
+    margin-bottom: 20px;
+}
+
+#alarms li {
+    color: red;
+    font-weight: bold;
+}
