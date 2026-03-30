@@ -111,7 +111,7 @@ pip install -r requirements.txt
 ### 4. Uruchomienie backendu
 
 ```bash
-python backend/app.py
+python -m backend.main
 ```
 
 ---
