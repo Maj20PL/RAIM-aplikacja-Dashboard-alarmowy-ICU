@@ -6,68 +6,70 @@
 ![CSS3](https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white)
 ## Informacje o projekcie
 
+<p align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/8/8c/Logo_Pg_en.jpg" alt="Politechnika Gdańska" width="200"/>
+  <br>
+  <b>Politechnika Gdańska</b><br>
+  Wydział Elektroniki, Telekomunikacji i Informatyki<br>
+  Katedra Inżynierii Biomedycznej
+</p>
+
 **Przedmiot:** Rozwój aplikacji internetowych w medycynie  
 **Autorzy:** Patryk Majewski, Wiktor Gnaczyński  
 **Indeksy:** 198021, 198387  
 **Rok studiów:** 3  
 **Prowadzący:** dr inż. Anna Jezierska  
-**Uczelnia:** Politechnika Gdańska – Katedra Inżynierii Biomedycznej
+---
+
+## Analiza potrzeb i wymagań klinicznych
+
+### 1. Identyfikacja problemu
+Na oddziałach intensywnej terapii personel medyczny jest zalewany ogromną ilością danych z wielu urządzeń monitorujących jednocześnie. Kluczowym wyzwaniem jest:
+* **Przeciążenie informacyjne:** Zbyt duża liczba bodźców utrudnia szybką reakcję.
+* **Alarm Fatigue:** Ignorowanie sygnałów dźwiękowych/wizualnych z powodu ich nadmiaru.
+* **Krytyczność czasu:** W stanach zagrożenia życia, każda sekunda opóźnienia w wyświetleniu alarmu ma znaczenie.
+
+### 2. Określenie użytkowników
+* **Lekarze intensywnej terapii:** Potrzebują szybkiego podglądu trendów parametrów życiowych do podejmowania decyzji diagnostycznych.
+* **Personel pielęgniarski:** Główni odbiorcy alarmów, wymagający natychmiastowej i jednoznacznej informacji o przekroczeniu norm.
+
+### 3. Analiza ryzyk
+* **Opóźnienie systemowe:** Ryzyko, w którym stan pacjenta pogarsza się, a system wyświetla dane z opóźnieniem uniemożliwiającym skuteczną reanimację.
+* **Błędne progi:** Zbyt czułe progi generują szum informacyjny, zbyt niskie – mogą przeoczyć stan krytyczny.
+* **Awaria komunikacji:** Utrata połączenia między symulatorem a dashboardem.
 
 ---
 
-## Cel projektu
+## Projekt architektury systemu
 
-Celem projektu jest stworzenie aplikacji webowej symulującej system monitorowania pacjenta na oddziale intensywnej terapii (ICU), ze szczególnym uwzględnieniem:
+Projekt realizowany jest w modelu **API First** z wyraźnym rozdziałem warstw:
 
-* generowania alarmów medycznych w czasie rzeczywistym
-* analizy przeciążenia systemu (system overload)
-* badania wpływu opóźnień na prezentację alarmów
-* implementacji mechanizmów harmonogramowania zadań (task scheduling)
-
-Projekt realizowany jest etapowo – niniejsza wersja obejmuje **Etap 1 – implementację bazową**.
-
----
-
-## Architektura systemu
-
-Aplikacja została zaprojektowana w architekturze klient-serwer:
-
-### 🔹 Backend
-
-* Python + Flask
-* generowanie danych pacjenta (symulacja)
-* logika wykrywania alarmów
-
-### 🔹 Frontend
-
-* HTML + JavaScript
-* wizualizacja danych pacjenta
-* prezentacja alarmów
-
-### 🔹 Komunikacja
-
-* REST API (HTTP)
-* endpoint `/data` zwracający aktualne dane i alarmy
+1.  **Warstwa Generowania Danych:** Niezależny moduł generujący parametry życiowe w czasie rzeczywistym.
+2.  **Warstwa Logiki i Serwera:**
+    * Przechowywanie aktualnych wyników.
+    * **Silnik alarmów:** Porównywanie danych z zadanymi progami medycznymi.
+    * Udostępnianie danych przez endpoint REST API `/data`.
+3.  **Warstwa Prezentacji (Frontend - JS/HTML):**
+    * Cykliczne pobieranie danych (polling).
+    * Wizualizacja trendów na wykresach (Chart.js).
+    * Moduł powiadomień o aktywnych alarmach.
 
 ---
 
-## Implementacja alarmu progowego
-
-Przykładowe reguły:
-
-* HR > 100 → alarm „HIGH HR”
-* SpO₂ < 90 → alarm „LOW SpO₂”
-
----
-
-## Funkcjonalności aplikacji
-
-* symulacja danych pacjenta w czasie rzeczywistym
-* wykrywanie stanów alarmowych
-* wyświetlanie aktualnych parametrów
-* lista aktywnych alarmów
+## Cel projektu (Etap 1)
+Celem niniejszego etapu jest stworzenie stabilnej bazy systemu, obejmującej:
+* Generowanie danych pacjenta (HR, SpO2).
+* Implementację alarmu progowego:
+    * **HR > 100** → "HIGH HR"
+    * **SpO₂ < 90** → "LOW SpO₂"
+* Prezentację danych w czasie rzeczywistym na dashboardzie.
 
 ---
+
+## Technologie
+* **Backend:** Python 3.13, Flask
+* **Frontend:** HTML5, CSS3, JavaScript (Vanilla JS), Chart.js
+* **Komunikacja:** REST API (JSON)
 
 ## Instrukcja uruchomienia
 
@@ -142,14 +144,12 @@ Po uruchomieniu aplikacji:
 
 ```
 icu-dashboard/
-│
 ├── backend/
-│   ├── app.py
-│   └── simulator.py
-│
+│   ├── main.py        # Główny serwer Flask
+│   ├── simulacja.py   # Logika generowania danych
 ├── frontend/
-│   ├── index.html
-│   ├── script.js
-│   └── style.css
-│
-└── requirements.txt
+│   ├── index.html     # Widok dashboardu
+│   ├── script.js      # Logika pobierania danych i wykresy
+│   └── styl.css       # Style interfejsu
+├── requirements.txt   # Zależności projektu
+└── README.md
