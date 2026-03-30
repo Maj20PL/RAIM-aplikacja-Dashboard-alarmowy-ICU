@@ -44,12 +44,13 @@ Na oddziałach intensywnej terapii personel medyczny jest zalewany ogromną ilo�
 
 Projekt realizowany jest w modelu **API First** z wyraźnym rozdziałem warstw:
 
-1.  **Warstwa Generowania Danych:** Niezależny moduł generujący parametry życiowe w czasie rzeczywistym.
-2.  **Warstwa Logiki i Serwera:**
+1.  **Warstwa Generowania Danych:**
+    * Niezależny moduł generujący parametry życiowe w czasie rzeczywistym.
+3.  **Warstwa Logiki i Serwera:**
     * Przechowywanie aktualnych wyników.
     * **Silnik alarmów:** Porównywanie danych z zadanymi progami medycznymi.
     * Udostępnianie danych przez endpoint REST API `/data`.
-3.  **Warstwa Prezentacji (Frontend - JS/HTML):**
+4.  **Warstwa Prezentacji (Frontend - JS/HTML):**
     * Cykliczne pobieranie danych (polling).
     * Wizualizacja trendów na wykresach (Chart.js).
     * Moduł powiadomień o aktywnych alarmach.
