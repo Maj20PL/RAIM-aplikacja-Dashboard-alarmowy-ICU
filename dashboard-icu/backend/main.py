@@ -16,7 +16,6 @@ app = Flask(__name__)
 CORS(app)
 
 @app.route("/dane")
-@app.route("/dane")
 def home():
     data = generate_data()
     alarms = check_alarms(data)
