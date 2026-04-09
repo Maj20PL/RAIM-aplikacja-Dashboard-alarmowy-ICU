@@ -9,15 +9,46 @@
 
 <h1>ICU Dashboard</h1>
 
-<div id="data">
-    <p>HR: <span id="hr">-</span></p>
-    <canvas id="hrChart"></canvas>
-    <p>SpO2: <span id="spo2">-</span></p>
-    <canvas id="spo2Chart"></canvas>
-</div>
+<div class="page-grid">
+    <div class="overview-row">
+        <article class="stat-card hr-card" id="hrCard">
+            <span class="stat-label">HR</span>
+            <strong id="hrValue">-</strong>
+            <span class="stat-unit">BPM</span>
+        </article>
+        <article class="stat-card spo2-card">
+            <span class="stat-label">SpO2</span>
+            <strong id="spo2Value">-</strong>
+            <span class="stat-unit">%</span>
+        </article>
+        <article class="stat-card status-card normal" id="statusCard">
+            <span class="stat-label">Status</span>
+            <strong id="statusValue">Normal</strong>
+            <span class="stat-note">Live ICU monitoring</span>
+        </article>
+    </div>
 
-<h2>ALARM</h2>
-<ul id="alarms"></ul>
+    <div class="live-meta">
+        <span id="lastUpdate">Waiting for data...</span>
+        <span id="apiUrl">API: /data</span>
+    </div>
+
+    <section class="charts-grid">
+        <div class="chart-card">
+            <p class="chart-title">Heart Rate Trend</p>
+            <canvas id="hrChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <p class="chart-title">Oxygen Saturation Trend</p>
+            <canvas id="spo2Chart"></canvas>
+        </div>
+    </section>
+
+    <section class="alarms-panel">
+        <h2>Active Alarms</h2>
+        <ul id="alarms" class="alarm-list"></ul>
+    </section>
+</div>
 
 <script src="skrypt.js"></script>
 </body>
