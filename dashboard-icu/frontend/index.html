@@ -9,42 +9,90 @@
 
 <h1>ICU Dashboard</h1>
 
-<div class="page-gird">
-    <div class="wiersz-overview">
-        <article class="karta-stanu hr-kart" id="hrKart">
-            <span class="etyk-stanu">HR</span>
+<section class="global-alert normal" id="globalAlert">
+    <div>
+        <span class="alert-label">Oddzial ICU</span>
+        <strong id="globalStatus">Wszyscy pacjenci stabilni</strong>
+    </div>
+    <span id="globalAlarmCount">0 aktywnych alarmow</span>
+</section>
+
+<div class="page-grid">
+    <section class="patients-panel">
+        <div class="section-header">
+            <h2>Monitorowani pacjenci</h2>
+            <span id="patientCount">10 pacjentow</span>
+        </div>
+        <div class="patient-grid" id="patientGrid"></div>
+    </section>
+
+    <div class="overview-row">
+        <article class="stat-card hr-card" id="hrCard">
+            <span class="stat-label">HR</span>
             <strong id="hrValue">-</strong>
+            <span class="stat-unit">BPM</span>
         </article>
-        <article class="karta-stanu spo2-kart">
-            <span class="etyk-stanu">SpO2</span>
+        <article class="stat-card spo2-card">
+            <span class="stat-label">SpO2</span>
             <strong id="spo2Value">-</strong>
-            <span class="jednostka-stanu">%</span>
+            <span class="stat-unit">%</span>
         </article>
-        <article class="karta-stanu status-kart normal" id="statusKart">
-            <span class="etyk-stanu">Status</span>
+        <article class="stat-card status-card normal" id="statusCard">
+            <span class="stat-label">Status</span>
             <strong id="statusValue">Normal</strong>
-            <span class="notka-statusu">Live ICU monitor</span>
+            <span class="stat-note" id="selectedPatientLabel">Wybierz pacjenta</span>
         </article>
     </div>
 
     <div class="live-meta">
-        <span id="lastUpdate">Oczekuje na dane ...</span>
+        <span id="lastUpdate">Waiting for data...</span>
+        <span id="apiUrl">API: /patients</span>
     </div>
 
     <section class="charts-grid">
         <div class="chart-card">
-            <p class="chart-title">Trend Tętna</p>
-            <canvas id="hrChart"></canvas>
+            <p class="chart-title">Heart Rate Trend</p>
+            <canvas id="hrChart" width="520" height="280"></canvas>
         </div>
         <div class="chart-card">
-            <p class="chart-title">Trend Nasycenia tlenem</p>
-            <canvas id="spo2Chart"></canvas>
+            <p class="chart-title">Oxygen Saturation Trend</p>
+            <canvas id="spo2Chart" width="520" height="280"></canvas>
         </div>
     </section>
 
     <section class="alarms-panel">
-        <h2>AKTYWNE ALARMY</h2>
+        <h2>Aktywne alarmy na oddziale</h2>
         <ul id="alarms" class="alarm-list"></ul>
+    </section>
+
+    <section class="instrumentation-panel">
+        <div class="section-header">
+            <h2>Instrumentacja</h2>
+            <span id="instrumentationRequest">Request -</span>
+        </div>
+        <div class="instrumentation-grid">
+            <article class="metric-card">
+                <span>Backend latency(opóźnienie)</span>
+                <strong id="backendLatency">-</strong>
+                <small>ms</small>
+            </article>
+            <article class="metric-card">
+                <span>API round-trip</span>
+                <strong id="clientLatency">-</strong>
+                <small>ms</small>
+            </article>
+            <article class="metric-card">
+                <span>Wahania w czasie dostarczania pakietów przez serwer (Server jitter)</span>
+                <strong id="serverJitter">-</strong>
+                <small>ms</small>
+            </article>
+            <article class="metric-card">
+                <span>Opoźnienia interfejsu przeglądarki (UI jitter)</span>
+                <strong id="clientJitter">-</strong>
+                <small>ms</small>
+            </article>
+        </div>
+        <ul class="telemetry-log" id="telemetryLog"></ul>
     </section>
 </div>
 
