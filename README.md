@@ -4,6 +4,7 @@
 ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E)
 ![HTML5](https://img.shields.io/badge/html5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/-SQLAlchemy-323330?style=for-the-badge&logo=sqlalchemy&logoColor=CE563D)
 ## Informacje o projekcie
 
 <p align="center">
@@ -99,9 +100,53 @@ Celem niniejszego etapu jest stworzenie stabilnej bazy systemu, obejmującej:
 * Prezentację danych w czasie rzeczywistym na dashboardzie.
 
 ---
+## Omówienie teoretyczne zaburzeń (Etap 2)
 
+### 1. Przeciążenie systemu (System Overload)
+
+Przeciążenie systemu występuje w sytuacji, gdy liczba generowanych zdarzeń przekracza możliwości ich przetwarzania przez system. W środowisku ICU może to prowadzić do opóźnień w prezentacji alarmów oraz utraty aktualności danych pacjenta.
+
+W systemach czasu rzeczywistego przeciążenie może skutkować:
+* wzrostem opóźnień,
+* pomijaniem alarmów,
+* spadkiem responsywności dashboardu,
+* zwiększonym wykorzystaniem CPU.
+
+---
+
+### 2. Burst alarmów
+
+Burst alarmów oznacza nagłe pojawienie się dużej liczby alarmów w krótkim czasie. W środowisku szpitalnym może to wystąpić np. podczas awarii urządzeń lub pogorszenia stanu wielu pacjentów jednocześnie.
+
+Konsekwencje:
+* przeciążenie interfejsu użytkownika,
+* alarm fatigue,
+* wydłużenie czasu reakcji personelu.
+
+---
+
+### 3. Opóźnienia (Latency)
+
+Latency oznacza czas pomiędzy wygenerowaniem alarmu a jego wyświetleniem użytkownikowi. W systemach ICU minimalizacja opóźnień jest kluczowa, ponieważ alarmy dotyczą stanów zagrożenia życia.
+
+Źródła opóźnień:
+* przetwarzanie backendu,
+* komunikacja sieciowa,
+* renderowanie frontendowe,
+* przeciążenie CPU.
+
+---
+
+### 4. Harmonogramowanie zadań (Task Scheduling)
+
+Task scheduling odnosi się do mechanizmów decydujących o kolejności obsługi alarmów. W systemach medycznych nie wszystkie alarmy mają taki sam priorytet – alarm krytyczny powinien zostać obsłużony szybciej niż alarm ostrzegawczy.
+
+Brak odpowiedniego harmonogramowania może prowadzić do:
+* opóźnienia alarmów krytycznych,
+* blokowania systemu przez alarmy niskiego priorytetu,
+* obniżenia bezpieczeństwa pacjentów.
 ## Technologie
-* **Backend:** Python 3.13, Flask
+* **Backend:** Python 3.14, Flask, SQLAlchemy
 * **Frontend:** HTML5, CSS3, JavaScript (Vanilla JS), Chart.js
 * **Komunikacja:** REST API (JSON)
 
