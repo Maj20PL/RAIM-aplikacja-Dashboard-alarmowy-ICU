@@ -24,8 +24,9 @@ const telemetryLog = document.getElementById("telemetryLog"); // Lista logów te
 const sharedChartOptions = {
     responsive: false,
     maintainAspectRatio: false,
+    animation: false,
     plugins: {
-        legend: { display: false } // Ukrycie legendy na wykresach
+        legend: { display: false }
     }
 };
 

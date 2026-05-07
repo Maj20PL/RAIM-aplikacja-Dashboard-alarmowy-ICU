@@ -46,7 +46,6 @@
 
     <div class="live-meta">
         <span id="lastUpdate">Waiting for data...</span>
-        <span id="apiUrl">API: /patients</span>
     </div>
 
     <section class="charts-grid">
@@ -68,7 +67,7 @@
     <section class="instrumentation-panel">
         <div class="section-header">
             <h2>Instrumentacja</h2>
-            <span id="instrumentationRequest">Request -</span>
+            <span id="instrumentationRequest"></span>
         </div>
         <div class="instrumentation-grid">
             <article class="metric-card">
@@ -77,7 +76,7 @@
                 <small>ms</small>
             </article>
             <article class="metric-card">
-                <span>API round-trip</span>
+                <span>Client latency(opóźnienia po stronie klinta)</span>
                 <strong id="clientLatency">-</strong>
                 <small>ms</small>
             </article>
