@@ -141,15 +141,18 @@ Po uruchomieniu aplikacji:
 ## 📁 Struktura projektu
 
 ```
-icu-dashboard/
+dashboard-icu/
 │
 ├── backend/
-│   ├── app.py
-│   └── simulator.py
+│   ├── main.py           # Główny serwer Flask, obsługa endpointów i telemetrii
+│   ├── symulacja.py      # Klasa iteratora (serce DSP i modelowania SpO2)
+│   ├── models.py         # Definicje tabel bazy danych (SQLAlchemy)
+│   └── mitdb/            # Lokalne pliki bazy MIT-BIH (.dat, .hea)
 │
-├── frontend/
+├── frontend/             
 │   ├── index.html
 │   ├── script.js
 │   └── style.css
 │
-└── requirements.txt
+├── icu_database.db       # Baza danych SQLite (logi pacjentów)
+└── requirements.txt     

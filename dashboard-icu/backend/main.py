@@ -56,37 +56,56 @@ def sprawdzenie_bazy_dla_pacejnta():
     """
     Funkcja sprawdzająca czy w bazie danych brakuje kolumn.
     """
-    inspector = inspect(db.engine)
-    if not inspector.has_table(PatientLog.__tablename__):
-        return
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table(PatientLog.__tablename__):
+            logger.info(f"Table {PatientLog.__tablename__} does not exist yet. It will be created.")
+            return
 
-    columns = {column["name"] for column in inspector.get_columns(PatientLog.__tablename__)}
-    migrations = {
-        "id_pacjenta": "ALTER TABLE patient_logs ADD COLUMN id_pacjenta VARCHAR(20)",
-        "nazwa_pacjenta": "ALTER TABLE patient_logs ADD COLUMN nazwa_pacjenta VARCHAR(80)",
-        "lozko": "ALTER TABLE patient_logs ADD COLUMN lozko VARCHAR(20)",
-    }
+        columns = {column["name"] for column in inspector.get_columns(PatientLog.__tablename__)}
+        migrations = {
+            "id_pacjenta": "ALTER TABLE patient_logs ADD COLUMN id_pacjenta VARCHAR(20)",
+            "nazwa_pacjenta": "ALTER TABLE patient_logs ADD COLUMN nazwa_pacjenta VARCHAR(80)",
+            "lozko": "ALTER TABLE patient_logs ADD COLUMN lozko VARCHAR(20)",
+            "record": "ALTER TABLE patient_logs ADD COLUMN record VARCHAR(10)",
+        }
 
-    # Wykonanie bezpośrednich zapytań SQL jeśli brakuje kolumny
-    for column, statement in migrations.items():
-        if column not in columns:
-            db.session.execute(text(statement))
-    db.session.commit()
+        # Wykonanie bezpośrednich zapytań SQL jeśli brakuje kolumny
+        for column, statement in migrations.items():
+            if column not in columns:
+                try:
+                    db.session.execute(text(statement))
+                    logger.info(f"Added column '{column}' to patient_logs table")
+                except Exception as e:
+                    logger.warning(f"Could not add column '{column}': {e}")
+        
+        db.session.commit()
+        logger.info("Database schema verified and updated")
+    except Exception as e:
+        logger.error(f"Error checking database schema: {e}")
 
 
 def create_simulators():
     """
     Inicjalizuje obiekty symulacji dla każdego pacjenta ze zdefiniowanej listy.
     Nadaje im początkowe "przesunięcie" (offset), aby wykresy każdego pacjenta 
-    startowały od innego momentu i nie wyglądały identycznie. Poprzednio był z tym duży prbolem
+    startowały od innego momentu i nie wyglądały identycznie.
     """
     simulators = {}
     for index, patient in enumerate(PACJENT_CONFINGS):
-        simulator = Symulacja(record_name=patient["record"])
-        offset = index * int(simulator.fs) * 15 # Przesunięcie o 15 sekund dla kolejnych pacjentów
-        if offset < len(simulator.signal) - simulator.window_size:
-            simulator.current_sample = offset
-        simulators[patient["id"]] = simulator
+        try:
+            simulator = Symulacja(record_name=patient["record"])
+            offset = index * int(simulator.fs) * 15  # Przesunięcie o 15 sekund dla kolejnych pacjentów
+            if offset < len(simulator.signal) - simulator.window_size:
+                simulator.current_sample = offset
+            simulators[patient["id"]] = simulator
+            logger.info(f"Created simulator for {patient['id']} with record {patient['record']}")
+        except Exception as e:
+            logger.error(f"Failed to create simulator for {patient['id']}: {e}")
+            # Create a fallback simulator with synthetic data
+            simulator = Symulacja(record_name=patient["record"])
+            simulators[patient["id"]] = simulator
+    
     return simulators
 
 
@@ -119,6 +138,7 @@ def zapis_logi_pacjenta(snapshot):
         patient_id=snapshot["patientId"],
         patient_name=snapshot["patientName"],
         bed=snapshot["bed"],
+        record=snapshot["record"],
         hr=snapshot["hr"],
         spo2=snapshot["spo2"],
         alarms=", ".join(snapshot["alarms"])
@@ -172,30 +192,39 @@ def pobierz_dane():
     """
     [GET] /data Pobiera pojedynczy 'snapshot' wybranego pacjent
     """
-    started_at = time.perf_counter()
-    patient_id = request.args.get("id_pacjenta", PACJENT_CONFINGS[0]["id"])
-    patient = next((p for p in PACJENT_CONFINGS if p["id"] == patient_id), PACJENT_CONFINGS[0])
-    
-    # Pobranie danych i zapis do bazy
-    snapshot = stworz_snapshot_pacjenta(patient, simulators[patient["id"]])
-    zapis_logi_pacjenta(snapshot)
-    db.session.commit()
-    
-    # Zbieranie metryk telemetrii
-    instrumentation = stworz_instrumentacje("/data", started_at)
+    try:
+        started_at = time.perf_counter()
+        patient_id = request.args.get("id_pacjenta", PACJENT_CONFINGS[0]["id"])
+        patient = next((p for p in PACJENT_CONFINGS if p["id"] == patient_id), PACJENT_CONFINGS[0])
+        
+        # Validate simulator exists
+        if patient["id"] not in simulators:
+            logger.error(f"Simulator not found for patient {patient['id']}")
+            return jsonify({"error": f"Patient {patient_id} not found"}), 404
+        
+        # Pobranie danych i zapis do bazy
+        snapshot = stworz_snapshot_pacjenta(patient, simulators[patient["id"]])
+        zapis_logi_pacjenta(snapshot)
+        db.session.commit()
+        
+        # Zbieranie metryk telemetrii
+        instrumentation = stworz_instrumentacje("/data", started_at)
 
-    logger.info(
-        "Pobrano i zapisano: %s %s HR=%s BPM SpO2=%s%% latency=%sms jitter=%sms",
-        snapshot["patientId"],
-        snapshot["bed"],
-        snapshot["hr"],
-        snapshot["spo2"],
-        instrumentation["backendLatencyMs"],
-        instrumentation["serverJitterMs"],
-    )
-    
-    snapshot["instrumentation"] = instrumentation
-    return jsonify(snapshot)
+        logger.info(
+            "Pobrano i zapisano: %s %s HR=%s BPM SpO2=%s%% latency=%sms jitter=%sms",
+            snapshot["patientId"],
+            snapshot["bed"],
+            snapshot["hr"],
+            snapshot["spo2"],
+            instrumentation["backendLatencyMs"],
+            instrumentation["serverJitterMs"],
+        )
+        
+        snapshot["instrumentation"] = instrumentation
+        return jsonify(snapshot)
+    except Exception as e:
+        logger.error(f"Error in /data endpoint: {e}")
+        return jsonify({"error": "Failed to retrieve patient data"}), 500
 
 
 @app.route("/patients")
@@ -204,36 +233,55 @@ def pobierz_pacjentow():
     [GET] /patients Pobiea najnowsze dane dla WSZYSTKICH pacjentów na oddziale na raz.
     Jest to głowny endpoint używany przez dashboard frontndu co 1 sekundę.
     """
-    started_at = time.perf_counter()
-    snapshots = []
-    
-    # Przejście po każdym pacjencie i pobranie wyników
-    for pacjent in PACJENT_CONFINGS:
-        snapshot = stworz_snapshot_pacjenta(pacjent, simulators[pacjent["id"]])
-        zapis_logi_pacjenta(snapshot) # Dodanie operacji do kolejki bazy danych
-        snapshots.append(snapshot)
+    try:
+        started_at = time.perf_counter()
+        snapshots = []
+        failed_patients = []
+        
+        # Przejście po każdym pacjencie i pobranie wyników
+        for pacjent in PACJENT_CONFINGS:
+            try:
+                if pacjent["id"] not in simulators:
+                    logger.error(f"Simulator not found for patient {pacjent['id']}")
+                    failed_patients.append(pacjent["id"])
+                    continue
+                
+                snapshot = stworz_snapshot_pacjenta(pacjent, simulators[pacjent["id"]])
+                zapis_logi_pacjenta(snapshot)  # Dodanie operacji do kolejki bazy danych
+                snapshots.append(snapshot)
+            except Exception as e:
+                logger.error(f"Error processing patient {pacjent['id']}: {e}")
+                failed_patients.append(pacjent["id"])
 
-    db.session.commit() # Zatwirdzenie wszystkich zmian w bazie za jednym razem
-    
-    # Sprawdzenie ile pacjentów posiada obecnie jakikolwiek alarm
-    active_alarms = [snapshot for snapshot in snapshots if snapshot["alarms"]]
-    instrumentation = stworz_instrumentacje("/patients", started_at)
+        db.session.commit()  # Zatwirdzenie wszystkich zmian w bazie za jednym razem
+        
+        # Sprawdzenie ile pacjentów posiada obecnie jakikolwiek alarm
+        active_alarms = [snapshot for snapshot in snapshots if snapshot["alarms"]]
+        instrumentation = stworz_instrumentacje("/patients", started_at)
 
-    logger.info(
-        "Snapshot oddzialu: patients=%s active_alarms=%s latency=%sms jitter=%sms",
-        len(snapshots),
-        len(active_alarms),
-        instrumentation["backendLatencyMs"],
-        instrumentation["serverJitterMs"],
-    )
+        logger.info(
+            "Snapshot oddzialu: patients=%s active_alarms=%s latency=%sms jitter=%sms",
+            len(snapshots),
+            len(active_alarms),
+            instrumentation["backendLatencyMs"],
+            instrumentation["serverJitterMs"],
+        )
 
-    # Zwrócenie zbiorczego formatu JSON
-    return jsonify({
-        "patients": snapshots,
-        "activeAlarmCount": len(active_alarms),
-        "updatedAt": datetime.now().strftime("%H:%M:%S"),
-        "instrumentation": instrumentation,
-    })
+        if failed_patients:
+            logger.warning(f"Failed to retrieve data for patients: {failed_patients}")
+
+        # Zwrócenie zbiorczego formatu JSON
+        return jsonify({
+            "patients": snapshots,
+            "activeAlarmCount": len(active_alarms),
+            "updatedAt": datetime.now().strftime("%H:%M:%S"),
+            "instrumentation": instrumentation,
+            "totalPatients": len(PACJENT_CONFINGS),
+            "successfulPatients": len(snapshots),
+        })
+    except Exception as e:
+        logger.error(f"Error in /patients endpoint: {e}")
+        return jsonify({"error": "Failed to retrieve patient data"}), 500
 
 
 @app.route("/history")
@@ -242,14 +290,18 @@ def pobierz_historie():
     [GET] /history Endpoint pomocniczy, zwracający 20 ostatnich logów pacjenta z bazy danych.
     (Opcjonalny np. do zasilenia wykresów po odświeżeniu strony, jeśli frontend zechce to wykorzystać)
     """
-    id_pacjenta = request.args.get("id_pacjenta")
-    query = PatientLog.query
-    if id_pacjenta:
-        query = query.filter(PatientLog.patient_id == id_pacjenta)
-    
-    # Pobranie 20 ostatnich wpisów od najnowszego
-    logs = query.order_by(PatientLog.id.desc()).limit(20).all()
-    return jsonify([l.to_dict() for l in logs])
+    try:
+        id_pacjenta = request.args.get("id_pacjenta")
+        query = PatientLog.query
+        if id_pacjenta:
+            query = query.filter(PatientLog.patient_id == id_pacjenta)
+        
+        # Pobranie 20 ostatnich wpisów od najnowszego
+        logs = query.order_by(PatientLog.id.desc()).limit(20).all()
+        return jsonify([l.to_dict() for l in logs])
+    except Exception as e:
+        logger.error(f"Error in /history endpoint: {e}")
+        return jsonify({"error": "Failed to retrieve patient history"}), 500
 
 # URUCHOMIENIE SERWERA
 if __name__ == "__main__":

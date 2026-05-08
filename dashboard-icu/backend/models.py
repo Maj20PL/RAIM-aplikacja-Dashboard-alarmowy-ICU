@@ -11,6 +11,7 @@ class PatientLog(db.Model):
     patient_id = db.Column(db.String(20))
     patient_name = db.Column(db.String(80))
     bed = db.Column(db.String(20))
+    record = db.Column(db.String(10))
     hr = db.Column(db.Float, nullable=False)
     spo2 = db.Column(db.Float, nullable=False)
     alarms = db.Column(db.String(200))
@@ -21,6 +22,7 @@ class PatientLog(db.Model):
             "patientId": self.patient_id,
             "patientName": self.patient_name,
             "lozko": self.bed,
+            "record": self.record,
             "hr": self.hr,
             "spo2": self.spo2,
             "alarms": self.alarms.split(", ") if self.alarms else []
