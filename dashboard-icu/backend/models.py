@@ -5,10 +5,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-
+# Pojedynczy zapis pomiaru pacjenta w bazie SQLite
 class PatientLog(db.Model):
-    """Pojedynczy zapis pomiaru pacjenta w bazie SQLite."""
-
     __tablename__ = "patient_logs"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -23,9 +21,8 @@ class PatientLog(db.Model):
     spo2 = db.Column(db.Float, nullable=False)
     alarms = db.Column(db.String(200))
 
+    # Zwraca log w formacie JSON uzywanym przez frontend
     def to_dict(self):
-        """Zwraca log w formacie JSON uzywanym przez frontend."""
-
         return {
             "timestamp": self.timestamp.strftime("%H:%M:%S"),
             "patientId": self.patient_id,

@@ -7,8 +7,6 @@ from scipy.signal import find_peaks
 
 
 class Symulacja:
-    """Symulator odczytujacy sygnal EKG z MITDB i generujacy parametry zyciowe."""
-
     _record_cache = {}
     _cache_lock = Lock()
 
@@ -23,11 +21,6 @@ class Symulacja:
         self.spo2 = 98.0
 
     def _load_record(self, record_name):
-        """
-        Wczytuje rekord MITDB tylko raz na nazwe rekordu.
-        Wielu pacjentow moze korzystac z tego samego sygnalu, ale kazdy ma wlasny offset.
-        """
-
         with self._cache_lock:
             if record_name in self._record_cache:
                 return self._record_cache[record_name]
@@ -51,14 +44,10 @@ class Symulacja:
             return signal, fs
 
     def ustaw_offset(self, offset):
-        """Ustawia punkt startowy pacjenta w sygnale, aby pacjenci nie byli zsynchronizowani."""
-
         max_start = max(0, len(self.signal) - self.window_size - 1)
         self.current_sample = min(offset % max(1, max_start), max_start)
 
     def pobierz_dane(self):
-        """Zwraca aktualne HR, SpO2 i liste alarmow dla jednego okna sygnalu."""
-
         end_idx = self.current_sample + self.window_size
         segment = self.signal[self.current_sample:end_idx]
 
@@ -86,8 +75,6 @@ class Symulacja:
         }
 
     def sprawdz_alarmy(self, hr, spo2):
-        """Proste reguly progowe alarmow medycznych."""
-
         alarms = []
         if hr > 100:
             alarms.append("HIGH HR")

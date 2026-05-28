@@ -14,9 +14,7 @@ from symulacja import Symulacja
 from testing_tools import create_testing_blueprint
 
 
-# -----------------------------------------------------------------------------
-# Konfiguracja Flask, logowania i bazy danych.
-# -----------------------------------------------------------------------------
+# Konfiguracja Flask, logowania i bazy danych
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -55,13 +53,11 @@ MITDB_RECORDS = [
     "222", "223", "228", "230", "231", "232", "233", "234",
 ]
 
-
+"""
+Tworzy konfiguracje pacjentow dla wszystkich oddzialow
+Rekordy MITDB sa przypisywane cyklicznie, a kazdy pacjent dostaje osobny offset
+"""
 def build_patient_configs():
-    """
-    Tworzy konfiguracje pacjentow dla wszystkich oddzialow.
-    Rekordy MITDB sa przypisywane cyklicznie, a kazdy pacjent dostaje osobny offset.
-    """
-
     patients = []
     global_index = 0
     for ward in WARDS:
@@ -84,10 +80,8 @@ PACJENT_CONFIGS = build_patient_configs()
 PATIENTS_BY_ID = {patient["id"]: patient for patient in PACJENT_CONFIGS}
 
 
-# -----------------------------------------------------------------------------
-# Wspoldzielony stan symulacji.
-# Watki-demony aktualizuja patient_snapshots, a endpointy API tylko odczytuja cache.
-# -----------------------------------------------------------------------------
+# Wspoldzielony stan symulacji
+# Watki-demony aktualizuja patient_snapshots, a endpointy API tylko odczytuja cache
 snapshot_lock = Lock()
 instrumentation_lock = Lock()
 log_queue = Queue()
@@ -111,9 +105,8 @@ instrumentation_state = {
     "last_started_at": {},
 }
 
-
+# Dodaje brakujace kolumny do istniejacej tabeli bez kasowania starych logow
 def sprawdzenie_bazy_dla_pacjenta():
-    """Dodaje brakujace kolumny do istniejacej tabeli bez kasowania starych logow."""
 
     inspector = inspect(db.engine)
     if not inspector.has_table(PatientLog.__tablename__):
@@ -135,13 +128,8 @@ def sprawdzenie_bazy_dla_pacjenta():
             db.session.execute(text(statement))
     db.session.commit()
 
-
+# Inicjalizuje osobny obiekt Symulacja dla kazdego pacjenta.
 def create_simulators():
-    """
-    Inicjalizuje osobny obiekt Symulacja dla kazdego pacjenta.
-    Same rekordy MITDB sa cache'owane w klasie Symulacja, wiec pliki nie sa dublowane w pamieci.
-    """
-
     simulators = {}
     for patient in PACJENT_CONFIGS:
         simulator = Symulacja(record_name=patient["record"])
@@ -150,10 +138,8 @@ def create_simulators():
         simulators[patient["id"]] = simulator
     return simulators
 
-
+# Pobiera aktualny pomiar pacjenta i opakowuje go w format JSON dla frontendu
 def stworz_snapshot_pacjenta(patient, simulator):
-    """Pobiera aktualny pomiar pacjenta i opakowuje go w format JSON dla frontendu."""
-
     data = simulator.pobierz_dane()
     status = "ALARM" if data["alarms"] else "NORMAL"
 
@@ -187,10 +173,8 @@ def zapis_logi_pacjenta(snapshot):
         alarms=", ".join(snapshot["alarms"]),
     )
 
-
+#Aktualizuje licznik alarmow i czas ostatniej symulacji dla jednego oddzialu
 def update_ward_status(ward_id, ward_snapshots):
-    """Aktualizuje licznik alarmow i czas ostatniej symulacji dla jednego oddzialu."""
-
     ward = next(ward for ward in WARDS if ward["id"] == ward_id)
     ward_status[ward_id] = {
         "wardId": ward_id,
@@ -200,13 +184,11 @@ def update_ward_status(ward_id, ward_snapshots):
         "updatedAt": datetime.now().strftime("%H:%M:%S"),
     }
 
-
+"""
+Watek-demon oddzialu
+Co sekunde przelicza pacjentow tylko z jednego oddzialu i zapisuje gotowe wyniki do cache
+"""
 def ward_simulation_worker(ward, simulators):
-    """
-    Watek-demon oddzialu.
-    Co sekunde przelicza pacjentow tylko z jednego oddzialu i zapisuje gotowe wyniki do cache.
-    """
-
     ward_id = ward["id"]
     patients = [patient for patient in PACJENT_CONFIGS if patient["wardId"] == ward_id]
 
@@ -226,13 +208,11 @@ def ward_simulation_worker(ward, simulators):
 
         stop_event.wait(SIMULATION_INTERVAL_SECONDS)
 
-
+"""
+Osobny watek-demon zapisujacy logi do SQLite.
+Oddzielenie zapisu od symulacji ogranicza blokowanie workerow oddzialow przez baze.
+"""
 def db_log_worker():
-    """
-    Osobny watek-demon zapisujacy logi do SQLite.
-    Oddzielenie zapisu od symulacji ogranicza blokowanie workerow oddzialow przez baze.
-    """
-
     with app.app_context():
         pending_logs = []
         while not stop_event.is_set():
@@ -248,10 +228,8 @@ def db_log_worker():
                 db.session.commit()
                 pending_logs = []
 
-
+# Uruchamia demony symulacji dla oddzialow oraz demona logowania do bazy
 def start_background_services():
-    """Uruchamia demony symulacji dla oddzialow oraz demona logowania do bazy."""
-
     simulators = create_simulators()
 
     # Pierwszy snapshot jest tworzony synchronicznie, zeby frontend od razu mial dane.
@@ -277,19 +255,15 @@ def start_background_services():
 
     Thread(target=db_log_worker, name="patient-log-writer", daemon=True).start()
 
-
+# Zwraca spojny odczyt pacjentow i statusow oddzialow z pamieci wspoldzielonej
 def get_cached_snapshots():
-    """Zwraca spojny odczyt pacjentow i statusow oddzialow z pamieci wspoldzielonej."""
-
     with snapshot_lock:
         patients = [patient_snapshots[patient["id"]].copy() for patient in PACJENT_CONFIGS]
         wards = [ward_status[ward["id"]].copy() for ward in WARDS]
     return patients, wards
 
-
+# Ocenia, czy opoznienia moga utrudnic poprawny odczyt danych ICU
 def get_warning_level(instrumentation):
-    """Ocenia, czy opoznienia moga utrudnic poprawny odczyt danych ICU."""
-
     latency = instrumentation["backendLatencyMs"] or 0
     jitter = abs(instrumentation["serverJitterMs"] or 0)
     latency_critical = latency >= BACKEND_LATENCY_CRITICAL_MS
@@ -325,10 +299,8 @@ def get_warning_level(instrumentation):
         },
     }
 
-
+# Kalkuluje latency i jitter dla odpowiedzi API
 def stworz_instrumentacje(endpoint, started_at):
-    """Kalkuluje latency i jitter dla odpowiedzi API."""
-
     ended_at = time.perf_counter()
     latency_ms = (ended_at - started_at) * 1000
 
@@ -365,9 +337,8 @@ with app.app_context():
 
 
 @app.route("/data")
+# [GET] /data zwraca gotowy snapshot jednego pacjenta z cache
 def pobierz_dane():
-    """[GET] /data zwraca gotowy snapshot jednego pacjenta z cache."""
-
     started_at = time.perf_counter()
     patient_id = request.args.get("id_pacjenta", PACJENT_CONFIGS[0]["id"])
 
@@ -381,9 +352,8 @@ def pobierz_dane():
 
 
 @app.route("/patients")
+# [GET] /patients zwraca wszystkich pacjentow pogrupowanych po oddzialach
 def pobierz_pacjentow():
-    """[GET] /patients zwraca wszystkich pacjentow pogrupowanych po oddzialach."""
-
     started_at = time.perf_counter()
     patients, wards = get_cached_snapshots()
     active_alarms = [snapshot for snapshot in patients if snapshot["alarms"]]
@@ -410,9 +380,8 @@ def pobierz_pacjentow():
 
 
 @app.route("/history")
+# [GET] /history zwraca ostatnie logi pacjenta lub oddzialu
 def pobierz_historie():
-    """[GET] /history zwraca ostatnie logi pacjenta lub oddzialu."""
-
     id_pacjenta = request.args.get("id_pacjenta")
     ward_id = request.args.get("ward_id")
     query = PatientLog.query
