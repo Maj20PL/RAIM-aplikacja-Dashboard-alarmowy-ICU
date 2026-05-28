@@ -65,7 +65,67 @@ Przykładowe reguły:
 * symulacja danych pacjenta w czasie rzeczywistym
 * wykrywanie stanów alarmowych
 * wyświetlanie aktualnych parametrów
+* wyświetlanie wykresów trendu parametrów
 * lista aktywnych alarmów
+* testy kontrolne aplikacji
+
+---
+
+## Cel projektu (Etap 1)
+Celem niniejszego etapu jest stworzenie stabilnej bazy systemu, obejmującej:
+* Generowanie danych pacjenta (HR, SpO2).
+* Implementację alarmu progowego:
+    * **HR > 100** → "HIGH HR"
+    * **SpO₂ < 90** → "LOW SpO₂"
+* Prezentację danych w czasie rzeczywistym na dashboardzie.
+
+---
+
+## Omówienie teoretyczne zaburzeń (Etap 2)
+
+### 1. Przeciążenie systemu (System Overload)
+
+Przeciążenie systemu występuje w sytuacji, gdy liczba generowanych zdarzeń przekracza możliwości ich przetwarzania przez system. W środowisku ICU może to prowadzić do opóźnień w prezentacji alarmów oraz utraty aktualności danych pacjenta.
+
+W systemach czasu rzeczywistego przeciążenie może skutkować:
+* wzrostem opóźnień,
+* pomijaniem alarmów,
+* spadkiem responsywności dashboardu,
+* zwiększonym wykorzystaniem CPU.
+
+---
+
+### 2. Burst alarmów
+
+Burst alarmów oznacza nagłe pojawienie się dużej liczby alarmów w krótkim czasie. W środowisku szpitalnym może to wystąpić np. podczas awarii urządzeń lub pogorszenia stanu wielu pacjentów jednocześnie.
+
+Konsekwencje:
+* przeciążenie interfejsu użytkownika,
+* alarm fatigue,
+* wydłużenie czasu reakcji personelu.
+
+---
+
+### 3. Opóźnienia (Latency)
+
+Latency oznacza czas pomiędzy wygenerowaniem alarmu a jego wyświetleniem użytkownikowi. W systemach ICU minimalizacja opóźnień jest kluczowa, ponieważ alarmy dotyczą stanów zagrożenia życia.
+
+Źródła opóźnień:
+* przetwarzanie backendu,
+* komunikacja sieciowa,
+* renderowanie frontendowe,
+* przeciążenie CPU.
+
+---
+
+### 4. Harmonogramowanie zadań (Task Scheduling)
+
+Task scheduling odnosi się do mechanizmów decydujących o kolejności obsługi alarmów. W systemach medycznych nie wszystkie alarmy mają taki sam priorytet – alarm krytyczny powinien zostać obsłużony szybciej niż alarm ostrzegawczy.
+
+Brak odpowiedniego harmonogramowania może prowadzić do:
+* opóźnienia alarmów krytycznych,
+* blokowania systemu przez alarmy niskiego priorytetu,
+* obniżenia bezpieczeństwa pacjentów.
 
 ---
 
@@ -130,7 +190,7 @@ Dodatkowo aplikacja ma test CPU na zywo. Uzytkownik wybiera liczbe rdzeni oraz c
 ### 1. Klonowanie repozytorium
 
 ```bash
-git clone https://github.com/your-repo/icu-dashboard.git
+git clone https://github.com/Maj20PL/RAIM-aplikacja-Dashboard-alarmowy-ICU.git
 cd icu-dashboard
 ```
 
@@ -167,7 +227,7 @@ pip install -r requirements.txt
 ### 4. Uruchomienie backendu
 
 ```bash
-python backend/app.py
+python backend/main.py
 ```
 
 ---
@@ -197,15 +257,19 @@ Po uruchomieniu aplikacji:
 ## 📁 Struktura projektu
 
 ```
-icu-dashboard/
+dashboard-icu/
 │
 ├── backend/
-│   ├── app.py
-│   └── simulator.py
+│   ├── main.py
+│   ├── symulacja.py
+│   ├── models.py
+    ├── testing_tools.py
+│   └── mitdb/
 │
-├── frontend/
+├── frontend/             
 │   ├── index.html
 │   ├── script.js
 │   └── style.css
 │
-└── requirements.txt
+├── icu_database.db
+└── requirements.txt     

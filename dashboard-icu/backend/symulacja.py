@@ -141,6 +141,6 @@ class Symulacja:
             alarms.append("CRITICAL: EXTREME HR")
         if 85 <= spo2 < 92:
             alarms.append("HIGH: ABNORMAL SpO2")
-        if (100 < hr <= 140) or (40 <= hr < 60):
+        if (100 < hr <= 140) or (40 >= hr):
             alarms.append("HIGH: ABNORMAL HR")
         return alarms

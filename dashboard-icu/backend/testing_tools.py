@@ -11,12 +11,9 @@ from flask import Blueprint, jsonify, request
 MAX_CPU_TEST_SECONDS = 120
 
 
-def create_testing_blueprint(create_instrumentation):
-    """
-    Tworzy osobny modul endpointow testowych dla Etapu 3.
-    Main.py przekazuje funkcje instrumentacji, aby testy korzystaly z tych samych metryk.
-    """
+# Tworzy osobny modul endpointow testowych dla Etapu 3.
 
+def create_testing_blueprint(create_instrumentation):
     testing = Blueprint("testing_tools", __name__)
     cpu_test_lock = Lock()
     cpu_test_state = {
@@ -28,13 +25,11 @@ def create_testing_blueprint(create_instrumentation):
         "processes": [],
         "lastResult": None,
     }
-
+    """
+    Demonstracja race condition.
+    Wariant bez locka celowo rozdziela odczyt i zapis licznika.
+    """
     def run_race_demo(use_lock=False, thread_count=8, increments=2000):
-        """
-        Demonstracja race condition.
-        Wariant bez locka celowo rozdziela odczyt i zapis licznika.
-        """
-
         state = {"counter": 0}
         demo_lock = Lock()
 
@@ -68,9 +63,8 @@ def create_testing_blueprint(create_instrumentation):
             "control": "lock" if use_lock else "none",
         }
 
+    # Buduje komenda Pythona wykonujaca kontrolowane obciazenie CPU
     def cpu_burn_command(duration_seconds):
-        """Buduje komenda Pythona wykonujaca kontrolowane obciazenie CPU."""
-
         script = (
             "import math,time\n"
             f"end=time.perf_counter()+{duration_seconds}\n"
@@ -81,9 +75,8 @@ def create_testing_blueprint(create_instrumentation):
         )
         return [sys.executable, "-c", script]
 
+    # Usuwa zakonczone procesy testu CPU i aktualizuje status testu
     def cleanup_finished_cpu_processes():
-        """Usuwa zakonczone procesy testu CPU i aktualizuje status testu."""
-
         with cpu_test_lock:
             processes = cpu_test_state["processes"]
             alive = [process for process in processes if process.poll() is None]
@@ -98,9 +91,8 @@ def create_testing_blueprint(create_instrumentation):
                     "message": "Test CPU zakonczony.",
                 }
 
+    # Demon pilnujacy czasu trwania testu CPU
     def watch_cpu_test():
-        """Demon pilnujacy czasu trwania testu CPU."""
-
         while True:
             cleanup_finished_cpu_processes()
             with cpu_test_lock:
@@ -120,9 +112,8 @@ def create_testing_blueprint(create_instrumentation):
 
             time.sleep(0.25)
 
+    # Zwraca status testu CPU bez nieserializowalnych obiektow procesow
     def get_cpu_test_public_state():
-        """Zwraca status testu CPU bez nieserializowalnych obiektow procesow."""
-
         cleanup_finished_cpu_processes()
         with cpu_test_lock:
             remaining = 0
@@ -141,9 +132,9 @@ def create_testing_blueprint(create_instrumentation):
             }
 
     @testing.route("/concurrency-demo")
-    def concurrency_demo():
-        """[GET] /concurrency-demo porownuje race condition przed i po uzyciu locka."""
 
+    # [GET] /concurrency-demo porownuje race condition przed i po uzyciu locka
+    def concurrency_demo():
         started_at = time.perf_counter()
         unsafe = run_race_demo(use_lock=False)
         safe = run_race_demo(use_lock=True)
@@ -162,9 +153,9 @@ def create_testing_blueprint(create_instrumentation):
         })
 
     @testing.route("/cpu-test", methods=["POST"])
-    def start_cpu_test():
-        """[POST] /cpu-test uruchamia kontrolowany test obciazenia CPU."""
 
+    # [POST] /cpu-test uruchamia kontrolowany test obciazenia CPU"
+    def start_cpu_test():
         payload = request.get_json(silent=True) or {}
         max_cores = os.cpu_count() or 1
         cores = int(payload.get("cores", 1))
@@ -214,9 +205,9 @@ def create_testing_blueprint(create_instrumentation):
         return jsonify(get_cpu_test_public_state())
 
     @testing.route("/cpu-test/status")
-    def cpu_test_status():
-        """[GET] /cpu-test/status zwraca biezacy status testu CPU."""
 
+    # [GET] /cpu-test/status zwraca biezacy status testu CPU
+    def cpu_test_status():
         return jsonify(get_cpu_test_public_state())
 
     return testing

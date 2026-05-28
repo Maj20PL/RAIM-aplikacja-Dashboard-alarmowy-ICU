@@ -27,10 +27,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
 
-# -----------------------------------------------------------------------------
 # Konfiguracja oddzialow i pacjentow.
 # Aplikacja obsluguje 3 oddzialy po 20 pacjentow, czyli lacznie 60 stanowisk.
-# -----------------------------------------------------------------------------
 PATIENTS_PER_WARD = 20
 SIMULATION_INTERVAL_SECONDS = 1
 DB_LOG_BATCH_SIZE = 120
@@ -53,10 +51,8 @@ MITDB_RECORDS = [
     "222", "223", "228", "230", "231", "232", "233", "234",
 ]
 
-"""
-Tworzy konfiguracje pacjentow dla wszystkich oddzialow
-Rekordy MITDB sa przypisywane cyklicznie, a kazdy pacjent dostaje osobny offset
-"""
+
+# Tworzy konfiguracje pacjentow dla wszystkich oddzialow
 def build_patient_configs():
     patients = []
     global_index = 0
@@ -157,10 +153,8 @@ def stworz_snapshot_pacjenta(patient, simulator):
         "updatedAt": datetime.now().strftime("%H:%M:%S"),
     }
 
-
+# Zamienia snapshot z pamieci na rekord bazy danych
 def zapis_logi_pacjenta(snapshot):
-    """Zamienia snapshot z pamieci na rekord bazy danych."""
-
     return PatientLog(
         patient_id=snapshot["patientId"],
         patient_name=snapshot["patientName"],
@@ -173,7 +167,7 @@ def zapis_logi_pacjenta(snapshot):
         alarms=", ".join(snapshot["alarms"]),
     )
 
-#Aktualizuje licznik alarmow i czas ostatniej symulacji dla jednego oddzialu
+# Aktualizuje licznik alarmow i czas ostatniej symulacji dla jednego oddzialu
 def update_ward_status(ward_id, ward_snapshots):
     ward = next(ward for ward in WARDS if ward["id"] == ward_id)
     ward_status[ward_id] = {
@@ -232,7 +226,7 @@ def db_log_worker():
 def start_background_services():
     simulators = create_simulators()
 
-    # Pierwszy snapshot jest tworzony synchronicznie, zeby frontend od razu mial dane.
+    # Pierwszy snapshot jest tworzony synchronicznie, zeby frontend od razu mial dane
     for ward in WARDS:
         patients = [patient for patient in PACJENT_CONFIGS if patient["wardId"] == ward["id"]]
         ward_snapshots = [
@@ -396,5 +390,4 @@ def pobierz_historie():
 
 
 if __name__ == "__main__":
-    # Flask takze pracuje wielowatkowo, a ciezka symulacja jest juz w daemonach oddzialow.
     app.run(host="127.0.0.1", port=5000, threaded=True)
