@@ -21,9 +21,9 @@
     <section class="patients-panel">
         <div class="section-header">
             <h2>Monitorowani pacjenci</h2>
-            <span id="patientCount">10 pacjentow</span>
+            <span id="patientCount">60 pacjentow</span>
         </div>
-        <div class="patient-grid" id="patientGrid"></div>
+        <div class="ward-list" id="patientGrid"></div>
     </section>
 
     <div class="overview-row">
@@ -46,8 +46,12 @@
 
     <div class="live-meta">
         <span id="lastUpdate">Waiting for data...</span>
-        <span id="apiUrl">API: /patients</span>
     </div>
+
+    <section class="delay-warning normal" id="delayWarning">
+        <strong id="delayWarningTitle">Opoznienia w normie</strong>
+        <span id="delayWarningMessage">System odswieza dane zgodnie z zalozonym interwalem.</span>
+    </section>
 
     <section class="charts-grid">
         <div class="chart-card">
@@ -61,14 +65,14 @@
     </section>
 
     <section class="alarms-panel">
-        <h2>Aktywne alarmy na oddziale</h2>
+        <h2>Aktywne alarmy na oddzialach</h2>
         <ul id="alarms" class="alarm-list"></ul>
     </section>
 
     <section class="instrumentation-panel">
         <div class="section-header">
             <h2>Instrumentacja</h2>
-            <span id="instrumentationRequest">Request -</span>
+            <span id="instrumentationRequest"></span>
         </div>
         <div class="instrumentation-grid">
             <article class="metric-card">
@@ -77,7 +81,7 @@
                 <small>ms</small>
             </article>
             <article class="metric-card">
-                <span>API round-trip</span>
+                <span>Client latency(opóźnienia po stronie klinta)</span>
                 <strong id="clientLatency">-</strong>
                 <small>ms</small>
             </article>
@@ -93,6 +97,35 @@
             </article>
         </div>
         <ul class="telemetry-log" id="telemetryLog"></ul>
+    </section>
+
+    <section class="concurrency-panel">
+        <div class="section-header">
+            <h2>Etap 3: Wspolbieznosc i test CPU</h2>
+            <span id="cpuStatus">Test CPU nieaktywny</span>
+        </div>
+
+        <div class="concurrency-grid">
+            <article class="control-card">
+                <h3>Race condition</h3>
+                <button type="button" id="runRaceDemo">Uruchom porownanie</button>
+                <pre id="raceDemoResult">Brak wyniku</pre>
+            </article>
+
+            <article class="control-card">
+                <h3>Test CPU na zywo</h3>
+                <label>
+                    Rdzenie
+                    <input id="cpuCores" type="number" min="1" value="1">
+                </label>
+                <label>
+                    Czas [s]
+                    <input id="cpuDuration" type="number" min="1" max="120" value="10">
+                </label>
+                <button type="button" id="startCpuTest">Start testu</button>
+                <pre id="cpuTestResult">Wybierz liczbe rdzeni i czas testu.</pre>
+            </article>
+        </div>
     </section>
 </div>
 

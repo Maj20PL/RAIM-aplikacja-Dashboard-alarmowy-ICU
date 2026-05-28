@@ -69,6 +69,62 @@ Przykładowe reguły:
 
 ---
 
+## Etap 3 - Wspolbieznosc i analiza bledow
+
+W aktualnej wersji system monitoruje 3 oddzialy ICU po 20 pacjentow. Dane pacjentow sa aktualizowane w tle przez watki-demony, a frontend cyklicznie odpytuje endpoint `/patients`. Taki model dobrze pasuje do dashboardu alarmowego, ale wymaga kontroli wspoldzielonego stanu.
+
+### Wybrane zagadnienia wspolbieznosci
+
+* **Race condition** - blad, w ktorym kilka watkow jednoczesnie odczytuje i zapisuje te same dane. W dashboardzie mogloby to spowodowac niespojna liczbe alarmow albo odczyt pacjenta z poprzedniej iteracji symulacji.
+* **Lock / mutex** - mechanizm wzajemnego wykluczania. W projekcie blokady chronia snapshoty pacjentow, metryki instrumentacji i stan testu CPU.
+* **Buforowanie** - backend nie liczy danych pacjentow w trakcie requestu HTTP. Watki oddzialow wpisuja gotowe snapshoty do cache, a API wykonuje szybki odczyt z pamieci.
+* **Kolejka producent-konsument** - watki symulacji produkuja logi pacjentow, a osobny demon zapisuje je batchowo do SQLite. Dzieki temu zapis do bazy nie blokuje symulacji oddzialow.
+* **Drift i jitter** - przy odswiezaniu co 1 sekunde opoznienia moga narastac, gdy system jest obciazony. Dashboard mierzy latency i jitter, a przy przekroczeniu progow pokazuje ostrzezenie o ryzyku nieaktualnych danych.
+
+### Progi opoznien
+
+W dashboardzie zaimplementowano nastepujace progi oceny czytelnosci danych:
+
+| Metryka | OK | Ostrzezenie | Krytyczne |
+| --- | --- | --- | --- |
+| Backend latency | < 50 ms | 50-100 ms | > 100 ms |
+| Client latency | < 100 ms | 100-150 ms | > 150 ms |
+| Server jitter | < 20 ms | 20-30 ms | > 30 ms |
+| UI jitter | < 16 ms | >= 16 ms | > 16 ms |
+
+Przekroczenia sa oznaczane kolorami w panelu instrumentacji. Dodatkowo nad wykresami pojawia sie ostrzezenie, gdy ktorykolwiek z progow moze utrudnic poprawny odczyt danych pacjentow.
+
+### Demonstracja zjawiska wspolbieznosci
+
+Endpoint `/concurrency-demo` uruchamia kontrolowana demonstracje `race condition`:
+
+* wariant **przed poprawka** zwieksza wspolny licznik w wielu watkach bez locka,
+* wariant **po poprawce** wykonuje te sama operacje z blokada `Lock`,
+* wynik pokazuje wartosc oczekiwana, wartosc uzyskana i liczbe utraconych aktualizacji.
+
+Demonstracje mozna uruchomic z panelu **Etap 3: Wspolbieznosc i test CPU** przyciskiem `Uruchom porownanie`.
+
+### Mechanizmy kontroli zaimplementowane w aplikacji
+
+* `snapshot_lock` - chroni wspolny cache snapshotow pacjentow i statusow oddzialow.
+* `instrumentation_lock` - chroni licznik requestow i pomiar jittera.
+* `cpu_test_lock` - chroni status testu CPU, aby nie uruchomic dwoch testow naraz.
+* `Queue` - buforuje logi pacjentow miedzy watkami symulacji a demonem zapisu do bazy.
+* batchowy zapis logow - ogranicza liczbe transakcji SQLite i zmniejsza ryzyko blokowania symulacji.
+
+### Porownanie przed i po poprawce
+
+W demonstracji race condition porownywane sa dwa warianty:
+
+| Wariant | Mechanizm | Oczekiwany efekt |
+| --- | --- | --- |
+| Przed poprawka | brak locka | licznik moze byc mniejszy od oczekiwanego, bo watki nadpisuja swoje aktualizacje |
+| Po poprawce | `Lock` | licznik powinien zgadzac sie z wartoscia oczekiwana |
+
+Dodatkowo aplikacja ma test CPU na zywo. Uzytkownik wybiera liczbe rdzeni oraz czas testu. Backend uruchamia osobne procesy obciazajace CPU, a dashboard pokazuje, jak zmieniaja sie opoznienia, jitter i ostrzezenia o wiarygodnosci odczytu.
+
+---
+
 ## Instrukcja uruchomienia
 
 ### 1. Klonowanie repozytorium

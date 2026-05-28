@@ -1,125 +1,153 @@
-import os
 import logging
+import os
 import time
-from threading import Lock
 from datetime import datetime
+from queue import Empty, Queue
+from threading import Event, Lock, Thread
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from models import db, PatientLog
-from symulacja import Symulacja
 from sqlalchemy import inspect, text
 
-# KONFIGURACJA LOGOWANIA I APLIKACJI FLASK
-# Ustawienie formatu logów wyświetlanych w konsoli
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+from models import PatientLog, db
+from symulacja import Symulacja
+from testing_tools import create_testing_blueprint
+
+
+# Konfiguracja Flask, logowania i bazy danych
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# Inicjalizacja głównego obiektu aplikacji Flask
 app = Flask(__name__)
 CORS(app)
 
-# KONFIGURACJA BAZY DANYCH (SQLAlchemy)
-# Ustalenie ścieżki do głównego katalogu projektu
 project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(project_dir, 'icu_database.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Podpięcie obiektu bazy danych pod aplikację Flask
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(project_dir, "icu_database.db")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
-# KONFIGURACJA PACJENTÓW
-# Statyczna lista definiująca pacjentów, ich identyfikatory i przypisane nagrania EKG (z bazy MIT-BIH)
-PACJENT_CONFINGS = [
-    {"id": "P001", "nazwa": "Pacjent 01", "lozko": "Łózko 1", "record": "100"},
-    {"id": "P002", "nazwa": "Pacjent 02", "lozko": "Łózko 2", "record": "101"},
-    {"id": "P003", "nazwa": "Pacjent 03", "lozko": "Łózko 3", "record": "102"},
-    {"id": "P004", "nazwa": "Pacjent 04", "lozko": "Łózko 4", "record": "103"},
-    {"id": "P005", "nazwa": "Pacjent 05", "lozko": "Łózko 5", "record": "104"},
-    {"id": "P006", "nazwa": "Pacjent 06", "lozko": "Łózko 6", "record": "105"},
-    {"id": "P007", "nazwa": "Pacjent 07", "lozko": "Łózko 7", "record": "106"},
-    {"id": "P008", "nazwa": "Pacjent 08", "lozko": "Łózko 8", "record": "107"},
-    {"id": "P009", "nazwa": "Pacjent 09", "lozko": "Łózko 9", "record": "108"},
-    {"id": "P010", "nazwa": "Pacjent 10", "lozko": "Łózko 10", "record": "203"},
+
+# -----------------------------------------------------------------------------
+# Konfiguracja oddzialow i pacjentow.
+# Aplikacja obsluguje 3 oddzialy po 20 pacjentow, czyli lacznie 60 stanowisk.
+# -----------------------------------------------------------------------------
+PATIENTS_PER_WARD = 20
+SIMULATION_INTERVAL_SECONDS = 1
+DB_LOG_BATCH_SIZE = 120
+BACKEND_LATENCY_WARNING_MS = 50
+BACKEND_LATENCY_CRITICAL_MS = 100
+SERVER_JITTER_WARNING_MS = 20
+SERVER_JITTER_CRITICAL_MS = 30
+
+WARDS = [
+    {"id": "ICU-A", "name": "Oddzial ICU A"},
+    {"id": "ICU-B", "name": "Oddzial ICU B"},
+    {"id": "ICU-C", "name": "Oddzial ICU C"},
 ]
 
-# KONFIGURACJA TELEMETRII (Mierzenie czasu odpowiedzi)
-EXPECTED_POLL_INTERVAL_MS = 1000 # Spodziewany czas między zapytaniami z frontendu (1 sekunda)
-instrumentation_lock = Lock() # Blokada (Mutex) do bezpiecznej zmiany stanu telemetrii pomiędzy wieloma wątkami
-instrumentation_state = {
-    "request_id": 0,          # Licznik przetworzonych zapytań
-    "last_started_at": {},    # Czas rozpoczęcia ostatniego zapytania dla konkretnego endpointu
+MITDB_RECORDS = [
+    "100", "101", "102", "103", "104", "105", "106", "107", "108", "109",
+    "111", "112", "113", "114", "115", "116", "117", "118", "119", "121",
+    "122", "123", "124", "200", "201", "202", "203", "205", "207", "208",
+    "209", "210", "212", "213", "214", "215", "217", "219", "220", "221",
+    "222", "223", "228", "230", "231", "232", "233", "234",
+]
+
+"""
+Tworzy konfiguracje pacjentow dla wszystkich oddzialow
+Rekordy MITDB sa przypisywane cyklicznie, a kazdy pacjent dostaje osobny offset
+"""
+def build_patient_configs():
+    patients = []
+    global_index = 0
+    for ward in WARDS:
+        for bed_number in range(1, PATIENTS_PER_WARD + 1):
+            global_index += 1
+            record = MITDB_RECORDS[(global_index - 1) % len(MITDB_RECORDS)]
+            patients.append({
+                "id": f"P{global_index:03d}",
+                "nazwa": f"Pacjent {global_index:03d}",
+                "lozko": f"Lozko {ward['id'][-1]}-{bed_number:02d}",
+                "record": record,
+                "wardId": ward["id"],
+                "wardName": ward["name"],
+                "offsetSeconds": global_index * 11,
+            })
+    return patients
+
+
+PACJENT_CONFIGS = build_patient_configs()
+PATIENTS_BY_ID = {patient["id"]: patient for patient in PACJENT_CONFIGS}
+
+
+# Wspoldzielony stan symulacji
+# Watki-demony aktualizuja patient_snapshots, a endpointy API tylko odczytuja cache
+snapshot_lock = Lock()
+instrumentation_lock = Lock()
+log_queue = Queue()
+stop_event = Event()
+
+patient_snapshots = {}
+ward_status = {
+    ward["id"]: {
+        "wardId": ward["id"],
+        "wardName": ward["name"],
+        "patientCount": PATIENTS_PER_WARD,
+        "activeAlarmCount": 0,
+        "updatedAt": None,
+    }
+    for ward in WARDS
 }
 
-# FUNKCJE POMOCNICZE
-def sprawdzenie_bazy_dla_pacejnta():
-    """
-    Funkcja sprawdzająca czy w bazie danych brakuje kolumn.
-    """
-    try:
-        inspector = inspect(db.engine)
-        if not inspector.has_table(PatientLog.__tablename__):
-            logger.info(f"Table {PatientLog.__tablename__} does not exist yet. It will be created.")
-            return
+EXPECTED_POLL_INTERVAL_MS = 1000
+instrumentation_state = {
+    "request_id": 0,
+    "last_started_at": {},
+}
 
-        columns = {column["name"] for column in inspector.get_columns(PatientLog.__tablename__)}
-        migrations = {
-            "id_pacjenta": "ALTER TABLE patient_logs ADD COLUMN id_pacjenta VARCHAR(20)",
-            "nazwa_pacjenta": "ALTER TABLE patient_logs ADD COLUMN nazwa_pacjenta VARCHAR(80)",
-            "lozko": "ALTER TABLE patient_logs ADD COLUMN lozko VARCHAR(20)",
-            "record": "ALTER TABLE patient_logs ADD COLUMN record VARCHAR(10)",
-        }
+# Dodaje brakujace kolumny do istniejacej tabeli bez kasowania starych logow
+def sprawdzenie_bazy_dla_pacjenta():
 
-        # Wykonanie bezpośrednich zapytań SQL jeśli brakuje kolumny
-        for column, statement in migrations.items():
-            if column not in columns:
-                try:
-                    db.session.execute(text(statement))
-                    logger.info(f"Added column '{column}' to patient_logs table")
-                except Exception as e:
-                    logger.warning(f"Could not add column '{column}': {e}")
-        
-        db.session.commit()
-        logger.info("Database schema verified and updated")
-    except Exception as e:
-        logger.error(f"Error checking database schema: {e}")
+    inspector = inspect(db.engine)
+    if not inspector.has_table(PatientLog.__tablename__):
+        return
 
+    columns = {column["name"] for column in inspector.get_columns(PatientLog.__tablename__)}
+    migrations = {
+        "patient_id": "ALTER TABLE patient_logs ADD COLUMN patient_id VARCHAR(20)",
+        "patient_name": "ALTER TABLE patient_logs ADD COLUMN patient_name VARCHAR(80)",
+        "ward_id": "ALTER TABLE patient_logs ADD COLUMN ward_id VARCHAR(20)",
+        "ward_name": "ALTER TABLE patient_logs ADD COLUMN ward_name VARCHAR(80)",
+        "bed": "ALTER TABLE patient_logs ADD COLUMN bed VARCHAR(20)",
+        "record_name": "ALTER TABLE patient_logs ADD COLUMN record_name VARCHAR(20)",
+        "alarms": "ALTER TABLE patient_logs ADD COLUMN alarms VARCHAR(200)",
+    }
 
+    for column, statement in migrations.items():
+        if column not in columns:
+            db.session.execute(text(statement))
+    db.session.commit()
+
+# Inicjalizuje osobny obiekt Symulacja dla kazdego pacjenta.
 def create_simulators():
-    """
-    Inicjalizuje obiekty symulacji dla każdego pacjenta ze zdefiniowanej listy.
-    Nadaje im początkowe "przesunięcie" (offset), aby wykresy każdego pacjenta 
-    startowały od innego momentu i nie wyglądały identycznie.
-    """
     simulators = {}
-    for index, patient in enumerate(PACJENT_CONFINGS):
-        try:
-            simulator = Symulacja(record_name=patient["record"])
-            offset = index * int(simulator.fs) * 15  # Przesunięcie o 15 sekund dla kolejnych pacjentów
-            if offset < len(simulator.signal) - simulator.window_size:
-                simulator.current_sample = offset
-            simulators[patient["id"]] = simulator
-            logger.info(f"Created simulator for {patient['id']} with record {patient['record']}")
-        except Exception as e:
-            logger.error(f"Failed to create simulator for {patient['id']}: {e}")
-            # Create a fallback simulator with synthetic data
-            simulator = Symulacja(record_name=patient["record"])
-            simulators[patient["id"]] = simulator
-    
+    for patient in PACJENT_CONFIGS:
+        simulator = Symulacja(record_name=patient["record"])
+        offset = int(simulator.fs) * patient["offsetSeconds"]
+        simulator.ustaw_offset(offset)
+        simulators[patient["id"]] = simulator
     return simulators
 
-
+# Pobiera aktualny pomiar pacjenta i opakowuje go w format JSON dla frontendu
 def stworz_snapshot_pacjenta(patient, simulator):
-    """
-    Pobiera najnowsze dane z symulatora danego pacjenta i przygotowuje obiekt
-    w formacie zgodnym z oczekiwaniami frontendu.
-    """
     data = simulator.pobierz_dane()
     status = "ALARM" if data["alarms"] else "NORMAL"
 
     return {
         "patientId": patient["id"],
         "patientName": patient["nazwa"],
+        "wardId": patient["wardId"],
+        "wardName": patient["wardName"],
         "bed": patient["lozko"],
         "record": patient["record"],
         "hr": data["hr"],
@@ -131,31 +159,151 @@ def stworz_snapshot_pacjenta(patient, simulator):
 
 
 def zapis_logi_pacjenta(snapshot):
-    """
-    Zapisuje obecny stan pacjenta (tętno, saturacja, alarmy) jako nowy wpis w bazie danych.
-    """
-    log = PatientLog(
+    """Zamienia snapshot z pamieci na rekord bazy danych."""
+
+    return PatientLog(
         patient_id=snapshot["patientId"],
         patient_name=snapshot["patientName"],
+        ward_id=snapshot["wardId"],
+        ward_name=snapshot["wardName"],
         bed=snapshot["bed"],
-        record=snapshot["record"],
+        record_name=snapshot["record"],
         hr=snapshot["hr"],
         spo2=snapshot["spo2"],
-        alarms=", ".join(snapshot["alarms"])
+        alarms=", ".join(snapshot["alarms"]),
     )
-    db.session.add(log)
 
+#Aktualizuje licznik alarmow i czas ostatniej symulacji dla jednego oddzialu
+def update_ward_status(ward_id, ward_snapshots):
+    ward = next(ward for ward in WARDS if ward["id"] == ward_id)
+    ward_status[ward_id] = {
+        "wardId": ward_id,
+        "wardName": ward["name"],
+        "patientCount": len(ward_snapshots),
+        "activeAlarmCount": sum(1 for snapshot in ward_snapshots if snapshot["alarms"]),
+        "updatedAt": datetime.now().strftime("%H:%M:%S"),
+    }
 
+"""
+Watek-demon oddzialu
+Co sekunde przelicza pacjentow tylko z jednego oddzialu i zapisuje gotowe wyniki do cache
+"""
+def ward_simulation_worker(ward, simulators):
+    ward_id = ward["id"]
+    patients = [patient for patient in PACJENT_CONFIGS if patient["wardId"] == ward_id]
+
+    while not stop_event.is_set():
+        ward_snapshots = [
+            stworz_snapshot_pacjenta(patient, simulators[patient["id"]])
+            for patient in patients
+        ]
+
+        with snapshot_lock:
+            for snapshot in ward_snapshots:
+                patient_snapshots[snapshot["patientId"]] = snapshot
+            update_ward_status(ward_id, ward_snapshots)
+
+        for snapshot in ward_snapshots:
+            log_queue.put(snapshot.copy())
+
+        stop_event.wait(SIMULATION_INTERVAL_SECONDS)
+
+"""
+Osobny watek-demon zapisujacy logi do SQLite.
+Oddzielenie zapisu od symulacji ogranicza blokowanie workerow oddzialow przez baze.
+"""
+def db_log_worker():
+    with app.app_context():
+        pending_logs = []
+        while not stop_event.is_set():
+            try:
+                snapshot = log_queue.get(timeout=0.5)
+                pending_logs.append(zapis_logi_pacjenta(snapshot))
+                log_queue.task_done()
+            except Empty:
+                pass
+
+            if pending_logs and (len(pending_logs) >= DB_LOG_BATCH_SIZE or log_queue.empty()):
+                db.session.add_all(pending_logs)
+                db.session.commit()
+                pending_logs = []
+
+# Uruchamia demony symulacji dla oddzialow oraz demona logowania do bazy
+def start_background_services():
+    simulators = create_simulators()
+
+    # Pierwszy snapshot jest tworzony synchronicznie, zeby frontend od razu mial dane.
+    for ward in WARDS:
+        patients = [patient for patient in PACJENT_CONFIGS if patient["wardId"] == ward["id"]]
+        ward_snapshots = [
+            stworz_snapshot_pacjenta(patient, simulators[patient["id"]])
+            for patient in patients
+        ]
+        with snapshot_lock:
+            for snapshot in ward_snapshots:
+                patient_snapshots[snapshot["patientId"]] = snapshot
+            update_ward_status(ward["id"], ward_snapshots)
+
+    for ward in WARDS:
+        thread = Thread(
+            target=ward_simulation_worker,
+            args=(ward, simulators),
+            name=f"simulation-{ward['id']}",
+            daemon=True,
+        )
+        thread.start()
+
+    Thread(target=db_log_worker, name="patient-log-writer", daemon=True).start()
+
+# Zwraca spojny odczyt pacjentow i statusow oddzialow z pamieci wspoldzielonej
+def get_cached_snapshots():
+    with snapshot_lock:
+        patients = [patient_snapshots[patient["id"]].copy() for patient in PACJENT_CONFIGS]
+        wards = [ward_status[ward["id"]].copy() for ward in WARDS]
+    return patients, wards
+
+# Ocenia, czy opoznienia moga utrudnic poprawny odczyt danych ICU
+def get_warning_level(instrumentation):
+    latency = instrumentation["backendLatencyMs"] or 0
+    jitter = abs(instrumentation["serverJitterMs"] or 0)
+    latency_critical = latency >= BACKEND_LATENCY_CRITICAL_MS
+    jitter_critical = jitter >= SERVER_JITTER_CRITICAL_MS
+    latency_warning = latency >= BACKEND_LATENCY_WARNING_MS
+    jitter_warning = jitter >= SERVER_JITTER_WARNING_MS
+
+    if latency_warning or jitter_warning:
+        return {
+            "active": True,
+            "level": "critical" if latency_critical or jitter_critical else "warning",
+            "message": (
+                "Zbyt duze opoznienie transmisji. Dane moga byc nieaktualne "
+                "i wymagaja ostroznej interpretacji."
+            ),
+            "thresholds": {
+                "backendLatencyWarningMs": BACKEND_LATENCY_WARNING_MS,
+                "backendLatencyCriticalMs": BACKEND_LATENCY_CRITICAL_MS,
+                "serverJitterWarningMs": SERVER_JITTER_WARNING_MS,
+                "serverJitterCriticalMs": SERVER_JITTER_CRITICAL_MS,
+            },
+        }
+
+    return {
+        "active": False,
+        "level": "normal",
+        "message": "Opoznienia w normie dla odswiezania danych co 1 sekunde.",
+        "thresholds": {
+            "backendLatencyWarningMs": BACKEND_LATENCY_WARNING_MS,
+            "backendLatencyCriticalMs": BACKEND_LATENCY_CRITICAL_MS,
+            "serverJitterWarningMs": SERVER_JITTER_WARNING_MS,
+            "serverJitterCriticalMs": SERVER_JITTER_CRITICAL_MS,
+        },
+    }
+
+# Kalkuluje latency i jitter dla odpowiedzi API
 def stworz_instrumentacje(endpoint, started_at):
-    """
-    Kalkuluje metryki sieciowe dla pojedynczego zapytania: opóźnienie backendu (latency)
-    oraz wahania (jitter) - czyli opóźnienia w stosunku do oczekiwanego interwału.
-    Zwraca słownik danych telemetrycznych dołączany do każdej odpowiedzi.
-    """
     ended_at = time.perf_counter()
     latency_ms = (ended_at - started_at) * 1000
 
-    # Dałem Lock() aby uniknąć błędów przy jednoczesnym odpytywaniu przez różne przeglądarki
     with instrumentation_lock:
         instrumentation_state["request_id"] += 1
         request_id = instrumentation_state["request_id"]
@@ -178,134 +326,75 @@ def stworz_instrumentacje(endpoint, started_at):
         "serverTimestamp": datetime.now().strftime("%H:%M:%S"),
     }
 
-# START APILKACJI I BAZY DANYCH
-# Kontekst aplikacji - przygotowanie bazy i stworzenie instancji symulatorów przed pierwszym requestem
+
+app.register_blueprint(create_testing_blueprint(stworz_instrumentacje))
+
+
 with app.app_context():
-    db.create_all() # Utworzenie struktury bazy jeśli nie istnieje
-    sprawdzenie_bazy_dla_pacejnta() # Sprawdzenie czy dodano nowe kolumny
-    simulators = create_simulators()
+    db.create_all()
+    sprawdzenie_bazy_dla_pacjenta()
+    start_background_services()
 
 
-# ENDPOINTY API (Miejsca styku z frontendem)
 @app.route("/data")
+# [GET] /data zwraca gotowy snapshot jednego pacjenta z cache
 def pobierz_dane():
-    """
-    [GET] /data Pobiera pojedynczy 'snapshot' wybranego pacjent
-    """
-    try:
-        started_at = time.perf_counter()
-        patient_id = request.args.get("id_pacjenta", PACJENT_CONFINGS[0]["id"])
-        patient = next((p for p in PACJENT_CONFINGS if p["id"] == patient_id), PACJENT_CONFINGS[0])
-        
-        # Validate simulator exists
-        if patient["id"] not in simulators:
-            logger.error(f"Simulator not found for patient {patient['id']}")
-            return jsonify({"error": f"Patient {patient_id} not found"}), 404
-        
-        # Pobranie danych i zapis do bazy
-        snapshot = stworz_snapshot_pacjenta(patient, simulators[patient["id"]])
-        zapis_logi_pacjenta(snapshot)
-        db.session.commit()
-        
-        # Zbieranie metryk telemetrii
-        instrumentation = stworz_instrumentacje("/data", started_at)
+    started_at = time.perf_counter()
+    patient_id = request.args.get("id_pacjenta", PACJENT_CONFIGS[0]["id"])
 
-        logger.info(
-            "Pobrano i zapisano: %s %s HR=%s BPM SpO2=%s%% latency=%sms jitter=%sms",
-            snapshot["patientId"],
-            snapshot["bed"],
-            snapshot["hr"],
-            snapshot["spo2"],
-            instrumentation["backendLatencyMs"],
-            instrumentation["serverJitterMs"],
-        )
-        
-        snapshot["instrumentation"] = instrumentation
-        return jsonify(snapshot)
-    except Exception as e:
-        logger.error(f"Error in /data endpoint: {e}")
-        return jsonify({"error": "Failed to retrieve patient data"}), 500
+    with snapshot_lock:
+        snapshot = patient_snapshots.get(patient_id, patient_snapshots[PACJENT_CONFIGS[0]["id"]]).copy()
+
+    instrumentation = stworz_instrumentacje("/data", started_at)
+    snapshot["instrumentation"] = instrumentation
+    snapshot["delayWarning"] = get_warning_level(instrumentation)
+    return jsonify(snapshot)
 
 
 @app.route("/patients")
+# [GET] /patients zwraca wszystkich pacjentow pogrupowanych po oddzialach
 def pobierz_pacjentow():
-    """
-    [GET] /patients Pobiea najnowsze dane dla WSZYSTKICH pacjentów na oddziale na raz.
-    Jest to głowny endpoint używany przez dashboard frontndu co 1 sekundę.
-    """
-    try:
-        started_at = time.perf_counter()
-        snapshots = []
-        failed_patients = []
-        
-        # Przejście po każdym pacjencie i pobranie wyników
-        for pacjent in PACJENT_CONFINGS:
-            try:
-                if pacjent["id"] not in simulators:
-                    logger.error(f"Simulator not found for patient {pacjent['id']}")
-                    failed_patients.append(pacjent["id"])
-                    continue
-                
-                snapshot = stworz_snapshot_pacjenta(pacjent, simulators[pacjent["id"]])
-                zapis_logi_pacjenta(snapshot)  # Dodanie operacji do kolejki bazy danych
-                snapshots.append(snapshot)
-            except Exception as e:
-                logger.error(f"Error processing patient {pacjent['id']}: {e}")
-                failed_patients.append(pacjent["id"])
+    started_at = time.perf_counter()
+    patients, wards = get_cached_snapshots()
+    active_alarms = [snapshot for snapshot in patients if snapshot["alarms"]]
+    instrumentation = stworz_instrumentacje("/patients", started_at)
 
-        db.session.commit()  # Zatwirdzenie wszystkich zmian w bazie za jednym razem
-        
-        # Sprawdzenie ile pacjentów posiada obecnie jakikolwiek alarm
-        active_alarms = [snapshot for snapshot in snapshots if snapshot["alarms"]]
-        instrumentation = stworz_instrumentacje("/patients", started_at)
+    logger.info(
+        "Snapshot ICU: wards=%s patients=%s active_alarms=%s latency=%sms jitter=%sms",
+        len(wards),
+        len(patients),
+        len(active_alarms),
+        instrumentation["backendLatencyMs"],
+        instrumentation["serverJitterMs"],
+    )
 
-        logger.info(
-            "Snapshot oddzialu: patients=%s active_alarms=%s latency=%sms jitter=%sms",
-            len(snapshots),
-            len(active_alarms),
-            instrumentation["backendLatencyMs"],
-            instrumentation["serverJitterMs"],
-        )
-
-        if failed_patients:
-            logger.warning(f"Failed to retrieve data for patients: {failed_patients}")
-
-        # Zwrócenie zbiorczego formatu JSON
-        return jsonify({
-            "patients": snapshots,
-            "activeAlarmCount": len(active_alarms),
-            "updatedAt": datetime.now().strftime("%H:%M:%S"),
-            "instrumentation": instrumentation,
-            "totalPatients": len(PACJENT_CONFINGS),
-            "successfulPatients": len(snapshots),
-        })
-    except Exception as e:
-        logger.error(f"Error in /patients endpoint: {e}")
-        return jsonify({"error": "Failed to retrieve patient data"}), 500
+    return jsonify({
+        "wards": wards,
+        "patients": patients,
+        "totalPatientCount": len(patients),
+        "activeAlarmCount": len(active_alarms),
+        "updatedAt": datetime.now().strftime("%H:%M:%S"),
+        "instrumentation": instrumentation,
+        "delayWarning": get_warning_level(instrumentation),
+    })
 
 
 @app.route("/history")
+# [GET] /history zwraca ostatnie logi pacjenta lub oddzialu
 def pobierz_historie():
-    """
-    [GET] /history Endpoint pomocniczy, zwracający 20 ostatnich logów pacjenta z bazy danych.
-    (Opcjonalny np. do zasilenia wykresów po odświeżeniu strony, jeśli frontend zechce to wykorzystać)
-    """
-    try:
-        id_pacjenta = request.args.get("id_pacjenta")
-        query = PatientLog.query
-        if id_pacjenta:
-            query = query.filter(PatientLog.patient_id == id_pacjenta)
-        
-        # Pobranie 20 ostatnich wpisów od najnowszego
-        logs = query.order_by(PatientLog.id.desc()).limit(20).all()
-        return jsonify([l.to_dict() for l in logs])
-    except Exception as e:
-        logger.error(f"Error in /history endpoint: {e}")
-        return jsonify({"error": "Failed to retrieve patient history"}), 500
+    id_pacjenta = request.args.get("id_pacjenta")
+    ward_id = request.args.get("ward_id")
+    query = PatientLog.query
 
-# URUCHOMIENIE SERWERA
+    if id_pacjenta:
+        query = query.filter(PatientLog.patient_id == id_pacjenta)
+    if ward_id:
+        query = query.filter(PatientLog.ward_id == ward_id)
+
+    logs = query.order_by(PatientLog.id.desc()).limit(20).all()
+    return jsonify([log.to_dict() for log in logs])
+
+
 if __name__ == "__main__":
-    # Parametr threaded=False wymusza działanie w pojedynczym wątku, co na systemach 
-    # Windows i w środowiskach IDE (np. PyCharm) pozwala uniknąć wieszania się 
-    # procesu po jego wyłączeniu, zapobiegając "zombie procesom" portu 5000.
-    app.run(host="127.0.0.1", port=5000, threaded=False)
+    # Flask takze pracuje wielowatkowo, a ciezka symulacja jest juz w daemonach oddzialow.
+    app.run(host="127.0.0.1", port=5000, threaded=True)
