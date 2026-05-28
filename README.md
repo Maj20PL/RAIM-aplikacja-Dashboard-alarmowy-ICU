@@ -4,91 +4,71 @@
 ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E)
 ![HTML5](https://img.shields.io/badge/html5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white)
-![SQLAlchemy](https://img.shields.io/badge/-SQLAlchemy-323330?style=for-the-badge&logo=sqlalchemy&logoColor=CE563D)
 ## Informacje o projekcie
-
-<p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/8/8c/Logo_Pg_en.jpg" alt="Politechnika Gdańska" width="200"/>
-  <br>
-  <b>Politechnika Gdańska</b><br>
-  Wydział Elektroniki, Telekomunikacji i Informatyki<br>
-  Katedra Inżynierii Biomedycznej
-</p>
 
 **Przedmiot:** Rozwój aplikacji internetowych w medycynie  
 **Autorzy:** Patryk Majewski, Wiktor Gnaczyński  
 **Indeksy:** 198021, 198387  
 **Rok studiów:** 3  
 **Prowadzący:** dr inż. Anna Jezierska  
+**Uczelnia:** Politechnika Gdańska – Katedra Inżynierii Biomedycznej
+
 ---
 
-## Analiza potrzeb i wymagań klinicznych
+## Cel projektu
 
-### 1. Identyfikacja problemu
-W systemach ICU monitoring odbywa się w sposób ciągły, a decyzje kliniczne podejmowane są w oparciu o dane czasu rzeczywistego. Każde opóźnienie w prezentacji danych lub alarmów może prowadzić do pogorszenia stanu pacjenta, dlatego systemy te muszą charakteryzować się wysoką niezawodnością i niską latencją.
-Na oddziałach intensywnej terapii personel medyczny jest zalewany ogromną ilością danych z wielu urządzeń monitorujących jednocześnie. Kluczowym wyzwaniem jest:
-* **Przeciążenie informacyjne:** Zbyt duża liczba bodźców utrudnia szybką reakcję.
-* **Alarm Fatigue:** Ignorowanie sygnałów dźwiękowych/wizualnych z powodu ich nadmiaru.
-* **Krytyczność czasu:** W stanach zagrożenia życia, każda sekunda opóźnienia w wyświetleniu alarmu ma znaczenie.
+Celem projektu jest stworzenie aplikacji webowej symulującej system monitorowania pacjenta na oddziale intensywnej terapii (ICU), ze szczególnym uwzględnieniem:
 
-### 2. Określenie użytkowników
-* **Lekarze intensywnej terapii:** Potrzebują szybkiego podglądu trendów parametrów życiowych do podejmowania decyzji diagnostycznych.
-* **Personel pielęgniarski:** Główni odbiorcy alarmów, wymagający natychmiastowej i jednoznacznej informacji o przekroczeniu norm.
+* generowania alarmów medycznych w czasie rzeczywistym
+* analizy przeciążenia systemu (system overload)
+* badania wpływu opóźnień na prezentację alarmów
+* implementacji mechanizmów harmonogramowania zadań (task scheduling)
 
-### 3. Analiza ryzyka
+Projekt realizowany jest etapowo – niniejsza wersja obejmuje **Etap 1 – implementację bazową**.
 
-Systemy monitorowania pacjentów w środowisku ICU należą do systemów krytycznych, w których błędy mogą prowadzić do bezpośredniego zagrożenia życia. W związku z tym zbadano i zidentyfikowano następujące kategorie ryzyk:
-
-#### Ryzyka systemowe
-* **Przeciążenie systemu:** Duża liczba jednoczesnych alarmów lub pacjentów może prowadzić do spadku wydajności systemu i opóźnień w ich prezentacji.
-* **Opóźnienia (latency):** Opóźnienie pomiędzy wygenerowaniem/pobraniem danych a ich wyświetleniem może skutkować nieaktualną oceną stanu pacjenta.
-* **Jitter:** Nieregularność w dostarczaniu danych może zaburzyć interpretację  wykresów.
-* **Utrata danych:** Pakiety danych mogą zostać utracone podczas transmisji.
-
-#### Ryzyka związane z danymi
-* **Niespójność danych:** Różnice między stanem rzeczywistym a prezentowanym mogą prowadzić do błędnych decyzji klinicznych.
-* **Błędne progi alarmowe:** Nieprawidłowo dobrane wartości progowe mogą powodować brak alarmów lub ich nadmiar.
-* **Dryft czasowy:** Różnice w czasie między backendem a frontendem mogą powodować błędne odwzorowanie danych na osi czasu.
-
-#### Ryzyka użytkownika
-* **Alarm fatigue:** Nadmiar alarmów prowadzi do ich ignorowania przez personel.
-* **Nieczytelny interfejs:** Zbyt skomplikowany lub nieintuicyjny dashboard może wydłużyć czas reakcji.
-* **Błędna interpretacja danych:** Użytkownik może źle zinterpretować wykresy lub wartości.
-
-#### Ryzyka techniczne
-* **Awaria backendu:** Brak możliwości generowania i udostępniania danych.
-* **Brak komunikacji frontend-backend:** Utrata połączenia skutkuje brakiem aktualizacji danych.
-* **Błędy implementacyjne:** Np. błędy w logice alarmów mogą generować fałszywe lub brakujące alarmy.
-
-#### Ryzyka kliniczne
-* **Fałszywie pozytywne alarmy:** Mogą prowadzić do niepotrzebnych interwencji.
-* **Fałszywie negatywne alarmy:** Brak alarmu w sytuacji zagrożenia życia.
-* **Opóźniona reakcja personelu:** Wynikająca z błędów systemowych lub przeciążenia informacyjnego.
 ---
 
-## Projekt architektury systemu
+## Architektura systemu
 
-Projekt realizowany jest w modelu **API First** z wyraźnym rozdziałem warstw:
+Aplikacja została zaprojektowana w architekturze klient-serwer:
 
-1.  **Warstwa Generowania Danych:**
-    * Niezależny moduł generujący parametry życiowe w czasie rzeczywistym.
-3.  **Warstwa Logiki i Serwera:**
-    * Przechowywanie aktualnych wyników.
-    * **Silnik alarmów:** Porównywanie danych z zadanymi progami medycznymi.
-    * Udostępnianie danych przez endpoint REST API `/data`.
-4.  **Warstwa Prezentacji (Frontend - JS/HTML):**
-    * Cykliczne pobieranie danych (polling).
-    * Wizualizacja trendów na wykresach (Chart.js).
-    * Moduł powiadomień o aktywnych alarmach.
+### 🔹 Backend
 
-### Schemat przepływu danych
+* Python + Flask
+* generowanie danych pacjenta (symulacja)
+* logika wykrywania alarmów
 
-[Generator danych/Baza danych] → [Backend Flask + logika alarmów] → [REST API] → [Frontend]
+### 🔹 Frontend
 
-1. Generator tworzy dane pacjenta (lub pobierane one są z bazy danych)
-2. Backend analizuje dane i wykrywa alarmy
-3. Dane są udostępniane przez API
-4. Frontend cyklicznie pobiera i wizualizuje dane
+* HTML + JavaScript
+* wizualizacja danych pacjenta
+* prezentacja alarmów
+
+### 🔹 Komunikacja
+
+* REST API (HTTP)
+* endpoint `/data` zwracający aktualne dane i alarmy
+
+---
+
+## Implementacja alarmu progowego
+
+Przykładowe reguły:
+
+* HR > 100 → alarm „HIGH HR”
+* SpO₂ < 90 → alarm „LOW SpO₂”
+
+---
+
+## Funkcjonalności aplikacji
+
+* symulacja danych pacjenta w czasie rzeczywistym
+* wykrywanie stanów alarmowych
+* wyświetlanie aktualnych parametrów
+* wyświetlanie wykresów trendu parametrów
+* lista aktywnych alarmów
+* testy kontrolne aplikacji
+
 ---
 
 ## Cel projektu (Etap 1)
@@ -100,6 +80,7 @@ Celem niniejszego etapu jest stworzenie stabilnej bazy systemu, obejmującej:
 * Prezentację danych w czasie rzeczywistym na dashboardzie.
 
 ---
+
 ## Omówienie teoretyczne zaburzeń (Etap 2)
 
 ### 1. Przeciążenie systemu (System Overload)
@@ -145,17 +126,71 @@ Brak odpowiedniego harmonogramowania może prowadzić do:
 * opóźnienia alarmów krytycznych,
 * blokowania systemu przez alarmy niskiego priorytetu,
 * obniżenia bezpieczeństwa pacjentów.
-## Technologie
-* **Backend:** Python 3.14, Flask, SQLAlchemy
-* **Frontend:** HTML5, CSS3, JavaScript (Vanilla JS), Chart.js
-* **Komunikacja:** REST API (JSON)
+
+---
+
+## Etap 3 - Wspolbieznosc i analiza bledow
+
+W aktualnej wersji system monitoruje 3 oddzialy ICU po 20 pacjentow. Dane pacjentow sa aktualizowane w tle przez watki-demony, a frontend cyklicznie odpytuje endpoint `/patients`. Taki model dobrze pasuje do dashboardu alarmowego, ale wymaga kontroli wspoldzielonego stanu.
+
+### Wybrane zagadnienia wspolbieznosci
+
+* **Race condition** - blad, w ktorym kilka watkow jednoczesnie odczytuje i zapisuje te same dane. W dashboardzie mogloby to spowodowac niespojna liczbe alarmow albo odczyt pacjenta z poprzedniej iteracji symulacji.
+* **Lock / mutex** - mechanizm wzajemnego wykluczania. W projekcie blokady chronia snapshoty pacjentow, metryki instrumentacji i stan testu CPU.
+* **Buforowanie** - backend nie liczy danych pacjentow w trakcie requestu HTTP. Watki oddzialow wpisuja gotowe snapshoty do cache, a API wykonuje szybki odczyt z pamieci.
+* **Kolejka producent-konsument** - watki symulacji produkuja logi pacjentow, a osobny demon zapisuje je batchowo do SQLite. Dzieki temu zapis do bazy nie blokuje symulacji oddzialow.
+* **Drift i jitter** - przy odswiezaniu co 1 sekunde opoznienia moga narastac, gdy system jest obciazony. Dashboard mierzy latency i jitter, a przy przekroczeniu progow pokazuje ostrzezenie o ryzyku nieaktualnych danych.
+
+### Progi opoznien
+
+W dashboardzie zaimplementowano nastepujace progi oceny czytelnosci danych:
+
+| Metryka | OK | Ostrzezenie | Krytyczne |
+| --- | --- | --- | --- |
+| Backend latency | < 50 ms | 50-100 ms | > 100 ms |
+| Client latency | < 100 ms | 100-150 ms | > 150 ms |
+| Server jitter | < 20 ms | 20-30 ms | > 30 ms |
+| UI jitter | < 16 ms | >= 16 ms | > 16 ms |
+
+Przekroczenia sa oznaczane kolorami w panelu instrumentacji. Dodatkowo nad wykresami pojawia sie ostrzezenie, gdy ktorykolwiek z progow moze utrudnic poprawny odczyt danych pacjentow.
+
+### Demonstracja zjawiska wspolbieznosci
+
+Endpoint `/concurrency-demo` uruchamia kontrolowana demonstracje `race condition`:
+
+* wariant **przed poprawka** zwieksza wspolny licznik w wielu watkach bez locka,
+* wariant **po poprawce** wykonuje te sama operacje z blokada `Lock`,
+* wynik pokazuje wartosc oczekiwana, wartosc uzyskana i liczbe utraconych aktualizacji.
+
+Demonstracje mozna uruchomic z panelu **Etap 3: Wspolbieznosc i test CPU** przyciskiem `Uruchom porownanie`.
+
+### Mechanizmy kontroli zaimplementowane w aplikacji
+
+* `snapshot_lock` - chroni wspolny cache snapshotow pacjentow i statusow oddzialow.
+* `instrumentation_lock` - chroni licznik requestow i pomiar jittera.
+* `cpu_test_lock` - chroni status testu CPU, aby nie uruchomic dwoch testow naraz.
+* `Queue` - buforuje logi pacjentow miedzy watkami symulacji a demonem zapisu do bazy.
+* batchowy zapis logow - ogranicza liczbe transakcji SQLite i zmniejsza ryzyko blokowania symulacji.
+
+### Porownanie przed i po poprawce
+
+W demonstracji race condition porownywane sa dwa warianty:
+
+| Wariant | Mechanizm | Oczekiwany efekt |
+| --- | --- | --- |
+| Przed poprawka | brak locka | licznik moze byc mniejszy od oczekiwanego, bo watki nadpisuja swoje aktualizacje |
+| Po poprawce | `Lock` | licznik powinien zgadzac sie z wartoscia oczekiwana |
+
+Dodatkowo aplikacja ma test CPU na zywo. Uzytkownik wybiera liczbe rdzeni oraz czas testu. Backend uruchamia osobne procesy obciazajace CPU, a dashboard pokazuje, jak zmieniaja sie opoznienia, jitter i ostrzezenia o wiarygodnosci odczytu.
+
+---
 
 ## Instrukcja uruchomienia
 
 ### 1. Klonowanie repozytorium
 
 ```bash
-git clone https://github.com/your-repo/icu-dashboard.git
+git clone https://github.com/Maj20PL/RAIM-aplikacja-Dashboard-alarmowy-ICU.git
 cd icu-dashboard
 ```
 
@@ -192,7 +227,7 @@ pip install -r requirements.txt
 ### 4. Uruchomienie backendu
 
 ```bash
-python -m backend.main
+python backend/main.py
 ```
 
 ---
@@ -222,13 +257,19 @@ Po uruchomieniu aplikacji:
 ## 📁 Struktura projektu
 
 ```
-icu-dashboard/
+dashboard-icu/
+│
 ├── backend/
-│   ├── main.py        # Główny serwer Flask
-│   ├── simulacja.py   # Logika generowania danych
-├── frontend/
-│   ├── index.html     # Widok dashboardu
-│   ├── script.js      # Logika pobierania danych i wykresy
-│   └── styl.css       # Style interfejsu
-├── requirements.txt   # Zależności projektu
-└── README.md
+│   ├── main.py
+│   ├── symulacja.py
+│   ├── models.py
+    ├── testing_tools.py
+│   └── mitdb/
+│
+├── frontend/             
+│   ├── index.html
+│   ├── script.js
+│   └── style.css
+│
+├── icu_database.db
+└── requirements.txt     
