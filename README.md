@@ -129,11 +129,11 @@ Brak odpowiedniego harmonogramowania może prowadzić do:
 
 ---
 
-## Etap 3 - Wspolbieznosc i analiza bledow
+## Etap 3 - Współbieżność i analiza błędów
 
-W aktualnej wersji system monitoruje 3 oddzialy ICU po 20 pacjentow. Dane pacjentow sa aktualizowane w tle przez watki-demony, a frontend cyklicznie odpytuje endpoint `/patients`. Taki model dobrze pasuje do dashboardu alarmowego, ale wymaga kontroli wspoldzielonego stanu.
+W aktualnej wersji system monitoruje 3 oddzialy ICU po 20 pacjentów. Dane pacjentoó sa aktualizowane w tle przez watki-demony, a frontend cyklicznie odpytuje endpoint `/patients`.
 
-### Wybrane zagadnienia wspolbieznosci
+### Wybrane zagadnienia współbieżności
 
 * **Race condition** - blad, w ktorym kilka watkow jednoczesnie odczytuje i zapisuje te same dane. W dashboardzie mogloby to spowodowac niespojna liczbe alarmow albo odczyt pacjenta z poprzedniej iteracji symulacji.
 * **Lock / mutex** - mechanizm wzajemnego wykluczania. W projekcie blokady chronia snapshoty pacjentow, metryki instrumentacji i stan testu CPU.
