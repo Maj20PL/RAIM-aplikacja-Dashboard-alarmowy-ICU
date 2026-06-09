@@ -71,10 +71,12 @@ class Symulacja:
             return annotation
 
     def ustaw_offset(self, offset):
+        # Kazdy pacjent startuje z innego fragmentu sygnalu, zeby odczyty nie byly identyczne
         max_start = max(0, len(self.signal) - self.window_size - 1)
         self.current_sample = min(offset % max(1, max_start), max_start)
 
     def pobierz_dane(self):
+        # Okno sygnalu przesuwa sie co sekunde symulacji i sluzy do wyliczenia HR
         end_idx = self.current_sample + self.window_size
         if end_idx > len(self.signal):
             self.current_sample = 0
@@ -94,6 +96,7 @@ class Symulacja:
 
         noise = random.uniform(-0.15, 0.15)
 
+        # Okresowe desaturacje symuluja nagle pogorszenie saturacji u pacjenta
         self.desat_timer -= 1
         if self.desat_timer <= 0 and self.desat_duration == 0:
             self.desat_duration = random.randint(4, 8)
@@ -116,6 +119,7 @@ class Symulacja:
         alarms = self.sprawdz_alarmy(hr, self.spo2)
 
         if self.annotation:
+            # Adnotacje MITDB dodaja alarmy arytmii wykryte w aktualnym oknie
             start_sample = self.current_sample - int(self.fs)
             end_sample = self.current_sample
             while self.ann_index < len(self.annotation.sample) and self.annotation.sample[self.ann_index] < end_sample:
@@ -134,6 +138,7 @@ class Symulacja:
         }
 
     def sprawdz_alarmy(self, hr, spo2):
+        # Prefiksy CRITICAL/HIGH sa pozniej mapowane w backendzie na priorytet alarmu.
         alarms = []
         if spo2 < 85:
             alarms.append("CRITICAL: LOW SpO2")

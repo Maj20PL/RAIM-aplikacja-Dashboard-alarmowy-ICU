@@ -184,8 +184,22 @@ h2 {
     background: rgba(180, 34, 34, 0.28);
 }
 
+.patient-card.alarm.priority-warning {
+    border-color: rgba(255, 190, 80, 0.68);
+    background: rgba(255, 150, 45, 0.18);
+}
+
+.patient-card.alarm.priority-critical {
+    border-color: rgba(255, 90, 90, 0.78);
+    background: rgba(180, 34, 34, 0.32);
+}
+
 .patient-card.alarm.selected {
     box-shadow: 0 0 0 2px rgba(255, 90, 90, 0.24);
+}
+
+.patient-card.alarm.priority-warning.selected {
+    box-shadow: 0 0 0 2px rgba(255, 190, 80, 0.26);
 }
 
 .patient-topline,
@@ -208,6 +222,35 @@ h2 {
 .patient-card.alarm .patient-topline span {
     color: #ffd2d2;
     font-weight: 700;
+}
+
+.patient-card.alarm.priority-warning .patient-topline span {
+    color: #ffe0a3;
+}
+
+.alarm-priority-badge {
+    width: fit-content;
+    padding: 5px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: 1px solid rgba(90, 255, 170, 0.24);
+    background: rgba(90, 255, 170, 0.1);
+    color: #a8ffd2;
+}
+
+.alarm-priority-badge.priority-warning {
+    border-color: rgba(255, 190, 80, 0.5);
+    background: rgba(255, 150, 45, 0.18);
+    color: #ffe0a3;
+}
+
+.alarm-priority-badge.priority-critical {
+    border-color: rgba(255, 90, 90, 0.58);
+    background: rgba(180, 34, 34, 0.32);
+    color: #ffd2d2;
 }
 
 .patient-name {
@@ -260,6 +303,16 @@ h2 {
 #statusCard.alarm {
     border-color: rgba(255, 100, 100, 0.55);
     background: rgba(180, 34, 34, 0.25);
+}
+
+#statusCard.alarm.priority-warning {
+    border-color: rgba(255, 190, 80, 0.58);
+    background: rgba(255, 150, 45, 0.15);
+}
+
+#statusCard.alarm.priority-critical {
+    border-color: rgba(255, 100, 100, 0.65);
+    background: rgba(180, 34, 34, 0.3);
 }
 
 .hr-card.active {
@@ -584,6 +637,23 @@ canvas {
     border: 1px solid rgba(255, 90, 90, 0.22);
     color: #fff2f2;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.alarm-details li.priority-warning {
+    background: rgba(255, 150, 45, 0.14);
+    border-color: rgba(255, 190, 80, 0.34);
+    color: #fff4d8;
+}
+
+.alarm-details li.priority-critical {
+    background: rgba(255, 0, 0, 0.18);
+    border-color: rgba(255, 90, 90, 0.36);
+    color: #fff2f2;
+}
+
+.alarm-details li .alarm-priority-badge {
+    margin-right: 8px;
+    vertical-align: middle;
 }
 
 @keyframes pulseGlow {

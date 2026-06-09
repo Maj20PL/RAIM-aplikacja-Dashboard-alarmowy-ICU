@@ -4,11 +4,9 @@ import time
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Event, Lock, Thread
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from sqlalchemy import inspect, text
-
 from models import PatientLog, db
 from symulacja import Symulacja
 from testing_tools import create_testing_blueprint
@@ -135,9 +133,18 @@ def create_simulators():
     return simulators
 
 # Pobiera aktualny pomiar pacjenta i opakowuje go w format JSON dla frontendu
+def okresl_priorytet_alarmu(alarms):
+    if any(alarm.startswith("CRITICAL:") for alarm in alarms):
+        return "critical", "Krytyczny"
+    if any(alarm.startswith("HIGH:") for alarm in alarms):
+        return "warning", "Wysoki"
+    return "normal", "Normalny"
+
+
 def stworz_snapshot_pacjenta(patient, simulator):
     data = simulator.pobierz_dane()
     status = "ALARM" if data["alarms"] else "NORMAL"
+    alarm_priority, alarm_priority_label = okresl_priorytet_alarmu(data["alarms"])
 
     return {
         "patientId": patient["id"],
@@ -149,6 +156,8 @@ def stworz_snapshot_pacjenta(patient, simulator):
         "hr": data["hr"],
         "spo2": data["spo2"],
         "alarms": data["alarms"],
+        "alarmPriority": alarm_priority,
+        "alarmPriorityLabel": alarm_priority_label,
         "status": status,
         "updatedAt": datetime.now().strftime("%H:%M:%S"),
     }

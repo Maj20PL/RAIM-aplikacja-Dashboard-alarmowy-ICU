@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request
 MAX_CPU_TEST_SECONDS = 120
 
 
-# Tworzy osobny modul endpointow testowych dla Etapu 3.
+# Tworzy osobny modul endpointow testowych dla Etapu 3
 
 def create_testing_blueprint(create_instrumentation):
     testing = Blueprint("testing_tools", __name__)
@@ -25,10 +25,8 @@ def create_testing_blueprint(create_instrumentation):
         "processes": [],
         "lastResult": None,
     }
-    """
-    Demonstracja race condition.
-    Wariant bez locka celowo rozdziela odczyt i zapis licznika.
-    """
+
+    # Demonstracja race condition
     def run_race_demo(use_lock=False, thread_count=8, increments=2000):
         state = {"counter": 0}
         demo_lock = Lock()

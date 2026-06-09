@@ -125,7 +125,7 @@ function appendPatientPoint(patient) {
         series.spo2.shift();
     }
 }
-
+// Grupowanie dla ulatwienia renderowanie osobnych sekcji dla kazdego oddzialu
 function groupPatientsByWard(patients) {
     return patients.reduce((groups, patient) => {
         if (!groups[patient.wardId]) {
@@ -149,6 +149,14 @@ function getAlarmBeds(patients) {
 function formatAlarmBeds(beds) {
     return beds.length > 0 ? `Alarm: ${beds.join(", ")}` : "Brak alarmow";
 }
+// Fallback dla zachowania zgodnosci, gdy backend nie zwroci jeszcze nowych pol
+function getAlarmPriority(patient) {
+    return patient.alarmPriority || (patient.alarms.length > 0 ? "warning" : "normal");
+}
+
+function getAlarmPriorityLabel(patient) {
+    return patient.alarmPriorityLabel || (patient.alarms.length > 0 ? "Wysoki" : "Normalny");
+}
 
 // FUNKCJE RENDERUJACE
 function renderCharts(patientId) {
@@ -162,19 +170,25 @@ function renderCharts(patientId) {
 }
 
 function createPatientCard(patient, patients) {
+    const alarmPriority = getAlarmPriority(patient);
+    const alarmPriorityLabel = getAlarmPriorityLabel(patient);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `patient-card ${patient.status === "ALARM" ? "alarm" : "normal"}`;
+    button.className = `patient-card ${patient.status === "ALARM" ? "alarm" : "normal"} priority-${alarmPriority}`;
     button.dataset.patientId = patient.patientId;
 
     if (patient.patientId === selectedPatientId) {
         button.classList.add("selected");
     }
 
+    // Pokazanie prioryteti zarowno tekstem, jak i kolorem karty.
     button.innerHTML = `
         <span class="patient-topline">
             <strong>${patient.bed}</strong>
             <span>${patient.status}</span>
+        </span>
+        <span class="alarm-priority-badge priority-${alarmPriority}">
+            Priorytet: ${alarmPriorityLabel}
         </span>
         <span class="patient-name">${patient.patientName}</span>
         <span class="patient-vitals">
@@ -241,13 +255,18 @@ function renderSelectedPatient(patient) {
     const hrCard = document.getElementById("hrCard");
     const statusCard = document.getElementById("statusCard");
     const statusValue = document.getElementById("statusValue");
+    const alarmPriority = getAlarmPriority(patient);
+    const alarmPriorityLabel = getAlarmPriorityLabel(patient);
 
     document.getElementById("hrValue").innerText = patient.hr;
     document.getElementById("spo2Value").innerText = patient.spo2;
     selectedPatientLabel.innerText = `${patient.wardName} | ${patient.bed} | ${patient.patientName}`;
+    statusCard.classList.remove("priority-normal", "priority-warning", "priority-critical");
+    statusCard.classList.add(`priority-${alarmPriority}`);
 
+    // Status wybranego pacjenta dziedziczy najwyzszy priorytet jego alarmow
     if (patient.alarms.length > 0) {
-        statusValue.innerText = "ALARM";
+        statusValue.innerText = `ALARM ${alarmPriorityLabel.toUpperCase()}`;
         statusCard.classList.remove("normal");
         statusCard.classList.add("alarm");
         hrCard.classList.add("active");
@@ -279,7 +298,7 @@ function renderAlarms(patients) {
     alarmsList.innerHTML = "";
     const grouped = groupPatientsByWard(patients);
 
-    // Alarmy sa liczone ze wszystkich pacjentow, niezaleznie od zwijania listy pacjentow.
+    // Alarmy sa liczone ze wszystkich pacjentow, niezaleznie od zwijania listy
     if (patients.every(patient => patient.alarms.length === 0)) {
         const li = document.createElement("li");
         li.className = "no-alarm";
@@ -319,8 +338,14 @@ function renderAlarms(patients) {
         details.className = "alarm-details";
         alarmPatients.forEach(patient => {
             patient.alarms.forEach(alarm => {
+                const alarmPriority = getAlarmPriority(patient);
+                const alarmPriorityLabel = getAlarmPriorityLabel(patient);
                 const alarmItem = document.createElement("li");
-                alarmItem.innerText = `[${patient.updatedAt}] ${patient.bed} | ${patient.patientName}: ${alarm} | HR=${patient.hr} BPM | SpO2=${patient.spo2}%`;
+                alarmItem.className = `priority-${alarmPriority}`;
+                alarmItem.innerHTML = `
+                    <span class="alarm-priority-badge priority-${alarmPriority}">${alarmPriorityLabel}</span>
+                    <span>[${patient.updatedAt}] ${patient.bed} | ${patient.patientName}: ${alarm} | HR=${patient.hr} BPM | SpO2=${patient.spo2}%</span>
+                `;
                 details.appendChild(alarmItem);
             });
         });
@@ -488,6 +513,7 @@ async function startCpuLoadTest() {
 // KOMUNIKACJA Z API
 async function fetchPatients() {
     const clientStartedAt = performance.now();
+    // Jitter po stronie UI liczony jest wzgledem oczekiwanego odswiezania co 1 s
     const measuredClientJitterMs = lastClientPollStartedAt === null
         ? null
         : clientStartedAt - lastClientPollStartedAt - expectedPollIntervalMs;
